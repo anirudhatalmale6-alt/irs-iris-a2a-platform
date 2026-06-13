@@ -902,6 +902,20 @@ MIIxxxxxx...
   </div>
 
   <script>
+    // ── Override fetch to add tunnel bypass header ──────────
+    const _origFetch = window.fetch;
+    window.fetch = function(url, opts = {}) {
+      if (!opts.headers) opts.headers = {};
+      if (opts.headers instanceof Headers) {
+        opts.headers.set('Bypass-Tunnel-Reminder', 'true');
+      } else if (Array.isArray(opts.headers)) {
+        opts.headers.push(['Bypass-Tunnel-Reminder', 'true']);
+      } else {
+        opts.headers['Bypass-Tunnel-Reminder'] = 'true';
+      }
+      return _origFetch.call(this, url, opts);
+    };
+
     // ── Navigation ──────────────────────────────────────────
     document.querySelectorAll('.nav-item').forEach(item => {
       item.addEventListener('click', () => {
