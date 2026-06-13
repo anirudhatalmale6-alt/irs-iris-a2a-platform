@@ -340,6 +340,12 @@
       <div class="nav-item" data-page="transmit">
         <span class="nav-icon">&#128228;</span> Transmit 1099
       </div>
+      <div class="nav-item" data-page="submissions">
+        <span class="nav-icon">&#128203;</span> Submissions
+      </div>
+      <div class="nav-item" data-page="payouts">
+        <span class="nav-icon">&#128176;</span> Payouts
+      </div>
       <div class="nav-item" data-page="settings">
         <span class="nav-icon">&#9881;</span> Settings
       </div>
@@ -695,6 +701,105 @@ MIIxxxxxx...
         </div>
       </div>
 
+      <!-- ── Submissions Page ────────────────────────────────── -->
+      <div id="page-submissions" class="page hidden">
+        <div class="page-header">
+          <h2>Submissions</h2>
+          <p>Track IRS-accepted submissions and link them to payouts</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#128203; Record New Submission</div>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">After IRS accepts your 1099, enter the IDs here to track it and process payouts.</p>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Transaction ID (from IRS)</label>
+              <input type="text" id="sub-tx-id" placeholder="Unique Transaction Identifier">
+            </div>
+            <div class="form-group">
+              <label>Submission ID</label>
+              <input type="text" id="sub-sub-id" placeholder="Submission ID from IRS">
+            </div>
+            <div class="form-group">
+              <label>Receipt Number</label>
+              <input type="text" id="sub-receipt" placeholder="Receipt number">
+            </div>
+            <div class="form-group">
+              <label>Form Type</label>
+              <select id="sub-form-type">
+                <option value="1099-A">1099-A</option>
+                <option value="1099-B">1099-B</option>
+                <option value="1099-C">1099-C</option>
+                <option value="1099-MISC" selected>1099-MISC</option>
+                <option value="1099-OID">1099-OID</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Recipient Name</label>
+              <input type="text" id="sub-recip-name" placeholder="Who was this for">
+            </div>
+            <div class="form-group">
+              <label>Amount</label>
+              <input type="text" id="sub-amount" placeholder="0.00">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Notes</label>
+            <input type="text" id="sub-notes" placeholder="Optional notes">
+          </div>
+          <button class="btn btn-primary" onclick="recordSubmission()">&#128190; Record Submission</button>
+        </div>
+
+        <div id="sub-result" style="margin-top: 16px;"></div>
+
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-title">&#128203; Recorded Submissions</div>
+          <div id="submissions-list" style="font-size:13px;color:var(--text-dim);">Loading...</div>
+        </div>
+      </div>
+
+      <!-- ── Payouts Page ────────────────────────────────────── -->
+      <div id="page-payouts" class="page hidden">
+        <div class="page-header">
+          <h2>Payouts</h2>
+          <p>Process payments to third parties via Stripe</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#128176; New Payout</div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Submission / Transaction ID</label>
+              <input type="text" id="pay-sub-id" placeholder="Link to a recorded submission">
+            </div>
+            <div class="form-group">
+              <label>Amount (USD)</label>
+              <input type="text" id="pay-amount" placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>Recipient Email</label>
+              <input type="text" id="pay-email" placeholder="recipient@example.com">
+            </div>
+            <div class="form-group">
+              <label>Recipient Name</label>
+              <input type="text" id="pay-name" placeholder="Full name">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input type="text" id="pay-desc" placeholder="Payment description">
+          </div>
+          <button class="btn btn-primary" onclick="processPayout()">&#128176; Process Payout</button>
+        </div>
+
+        <div id="pay-result" style="margin-top: 16px;"></div>
+
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-title">&#128176; Payout History</div>
+          <div id="payouts-list" style="font-size:13px;color:var(--text-dim);">Loading...</div>
+        </div>
+      </div>
+
       <!-- ── Settings Page ───────────────────────────────────── -->
       <div id="page-settings" class="page hidden">
         <div class="page-header">
@@ -720,6 +825,14 @@ MIIxxxxxx...
               <option value="test">Test (api.test.irs.gov)</option>
               <option value="production">Production (api.irs.gov)</option>
             </select>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#128176; Stripe Configuration</div>
+          <div class="form-group">
+            <label>Stripe Secret Key</label>
+            <input type="password" id="cfg-stripe-key" placeholder="sk_live_... or sk_test_...">
           </div>
         </div>
 
@@ -1063,6 +1176,8 @@ MIIxxxxxx...
         transmitterName: document.getElementById('cfg-name').value.trim()
       };
 
+      const stripeKey = document.getElementById('cfg-stripe-key').value.trim();
+
       try {
         const res = await fetch('/api/config/save', {
           method: 'POST',
@@ -1071,6 +1186,15 @@ MIIxxxxxx...
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
+
+        if (stripeKey) {
+          await fetch('/api/stripe/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stripeSecretKey: stripeKey })
+          });
+        }
+
         document.getElementById('cfg-result').innerHTML = '<div class="alert alert-success">Configuration saved successfully.</div>';
       } catch (err) {
         document.getElementById('cfg-result').innerHTML = `<div class="alert alert-error">Error: ${err.message}</div>`;
@@ -1189,6 +1313,142 @@ MIIxxxxxx...
         alert('Error: ' + err.message);
       }
     }
+
+    // ── Submissions ─────────────────────────────────────────
+    async function recordSubmission() {
+      const data = {
+        transactionId: document.getElementById('sub-tx-id').value.trim(),
+        submissionId: document.getElementById('sub-sub-id').value.trim(),
+        receiptNumber: document.getElementById('sub-receipt').value.trim(),
+        formType: document.getElementById('sub-form-type').value,
+        recipientName: document.getElementById('sub-recip-name').value.trim(),
+        amount: document.getElementById('sub-amount').value.trim(),
+        notes: document.getElementById('sub-notes').value.trim()
+      };
+
+      if (!data.transactionId || !data.submissionId) {
+        alert('Transaction ID and Submission ID are required');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/submissions/record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error);
+        document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">Submission recorded successfully.</div>';
+        loadSubmissions();
+      } catch (err) {
+        document.getElementById('sub-result').innerHTML = `<div class="alert alert-error">Error: ${err.message}</div>`;
+      }
+    }
+
+    async function loadSubmissions() {
+      try {
+        const res = await fetch('/api/submissions');
+        const data = await res.json();
+        const el = document.getElementById('submissions-list');
+
+        if (!data.submissions || data.submissions.length === 0) {
+          el.innerHTML = '<p>No submissions recorded yet.</p>';
+          return;
+        }
+
+        let html = '<table style="width:100%;border-collapse:collapse;">';
+        html += '<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:8px;">Transaction ID</th><th style="text-align:left;padding:8px;">Form</th><th style="text-align:left;padding:8px;">Recipient</th><th style="text-align:left;padding:8px;">Amount</th><th style="text-align:left;padding:8px;">Payout</th><th style="text-align:left;padding:8px;">Date</th></tr>';
+
+        for (const s of data.submissions.reverse()) {
+          const payoutBadge = s.payoutStatus === 'pending'
+            ? '<span class="badge badge-warning">Pending</span>'
+            : s.payoutStatus === 'initiated'
+            ? '<span class="badge badge-success">Initiated</span>'
+            : '<span class="badge badge-success">Done</span>';
+          html += `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px;font-family:monospace;">${(s.transactionId || '').substring(0, 16)}...</td>
+            <td style="padding:8px;">${s.formType}</td>
+            <td style="padding:8px;">${s.recipientName}</td>
+            <td style="padding:8px;">$${s.amount}</td>
+            <td style="padding:8px;">${payoutBadge}</td>
+            <td style="padding:8px;">${new Date(s.createdAt).toLocaleDateString()}</td>
+          </tr>`;
+        }
+        html += '</table>';
+        el.innerHTML = html;
+      } catch (_) {
+        document.getElementById('submissions-list').innerHTML = '<p>Failed to load submissions.</p>';
+      }
+    }
+
+    // ── Payouts ───────────────────────────────────────────────
+    async function processPayout() {
+      const data = {
+        submissionId: document.getElementById('pay-sub-id').value.trim(),
+        amount: document.getElementById('pay-amount').value.trim(),
+        recipientEmail: document.getElementById('pay-email').value.trim(),
+        recipientName: document.getElementById('pay-name').value.trim(),
+        description: document.getElementById('pay-desc').value.trim()
+      };
+
+      if (!data.amount || !data.recipientEmail) {
+        alert('Amount and Recipient Email are required');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/stripe/payout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error);
+        document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">Payout processed successfully. Stripe ID: ' + result.stripePaymentIntent.id + '</div>';
+        loadPayouts();
+      } catch (err) {
+        document.getElementById('pay-result').innerHTML = `<div class="alert alert-error">Error: ${err.message}</div>`;
+      }
+    }
+
+    async function loadPayouts() {
+      try {
+        const res = await fetch('/api/payouts');
+        const data = await res.json();
+        const el = document.getElementById('payouts-list');
+
+        if (!data.payouts || data.payouts.length === 0) {
+          el.innerHTML = '<p>No payouts recorded yet.</p>';
+          return;
+        }
+
+        let html = '<table style="width:100%;border-collapse:collapse;">';
+        html += '<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:8px;">Stripe ID</th><th style="text-align:left;padding:8px;">Recipient</th><th style="text-align:left;padding:8px;">Amount</th><th style="text-align:left;padding:8px;">Status</th><th style="text-align:left;padding:8px;">Date</th></tr>';
+
+        for (const p of data.payouts.reverse()) {
+          html += `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px;font-family:monospace;">${(p.stripeId || '').substring(0, 20)}...</td>
+            <td style="padding:8px;">${p.recipientName || p.recipientEmail || ''}</td>
+            <td style="padding:8px;">$${p.amount}</td>
+            <td style="padding:8px;"><span class="badge badge-success">${p.status}</span></td>
+            <td style="padding:8px;">${new Date(p.createdAt).toLocaleDateString()}</td>
+          </tr>`;
+        }
+        html += '</table>';
+        el.innerHTML = html;
+      } catch (_) {
+        document.getElementById('payouts-list').innerHTML = '<p>Failed to load payouts.</p>';
+      }
+    }
+
+    // Load data when navigating to submissions/payouts pages
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        if (item.dataset.page === 'submissions') loadSubmissions();
+        if (item.dataset.page === 'payouts') loadPayouts();
+      });
+    });
 
     // ── Utility ─────────────────────────────────────────────
     function copyToClipboard(elementId) {

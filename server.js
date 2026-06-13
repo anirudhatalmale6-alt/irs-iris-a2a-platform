@@ -431,6 +431,151 @@ api.get('/iris/form-types', (req, res) => {
   res.json({ formTypes: Object.keys(FORM_TYPES) });
 });
 
+// ── Submission Tracking ─────────────────────────────────────────────────────
+
+const db = require('./lib/db');
+
+api.post('/submissions/record', (req, res) => {
+  try {
+    const { formType, transactionId, receiptNumber, submissionId, recipientName, amount, taxYear, notes } = req.body;
+    if (!transactionId || !submissionId) {
+      return res.status(400).json({ error: 'transactionId and submissionId are required' });
+    }
+    const submission = db.addSubmission({
+      id: transactionId,
+      formType: formType || 'Unknown',
+      transactionId,
+      receiptNumber: receiptNumber || '',
+      submissionId,
+      recipientName: recipientName || '',
+      amount: amount || '0.00',
+      taxYear: taxYear || String(new Date().getFullYear()),
+      notes: notes || '',
+      status: 'accepted',
+      payoutStatus: 'pending'
+    });
+    res.json({ success: true, submission });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+api.get('/submissions', (req, res) => {
+  res.json({ submissions: db.readAll() });
+});
+
+api.get('/submissions/:id', (req, res) => {
+  const sub = db.getSubmission(req.params.id);
+  if (!sub) return res.status(404).json({ error: 'Submission not found' });
+  res.json({ submission: sub });
+});
+
+// ── Stripe Payout Routes ────────────────────────────────────────────────────
+
+const StripePayouts = require('./lib/stripe-payouts');
+
+api.post('/stripe/config', (req, res) => {
+  const { stripeSecretKey } = req.body;
+  if (!stripeSecretKey) return res.status(400).json({ error: 'stripeSecretKey is required' });
+  appConfig.stripeSecretKey = stripeSecretKey;
+  res.json({ success: true, message: 'Stripe configured' });
+});
+
+api.post('/stripe/payout', async (req, res) => {
+  try {
+    if (!appConfig.stripeSecretKey) {
+      return res.status(400).json({ error: 'Stripe is not configured. Add your secret key in Settings.' });
+    }
+
+    const { submissionId, recipientEmail, recipientName, amount, description } = req.body;
+    if (!amount || !recipientEmail) {
+      return res.status(400).json({ error: 'amount and recipientEmail are required' });
+    }
+
+    const stripe = new StripePayouts(appConfig.stripeSecretKey);
+
+    const paymentIntent = await stripe.createPaymentIntent({
+      amount: parseFloat(amount),
+      description: description || `Payout for submission ${submissionId}`,
+      metadata: { submissionId: submissionId || '', recipientName: recipientName || '' }
+    });
+
+    const payout = db.addPayout({
+      id: paymentIntent.id,
+      submissionId: submissionId || '',
+      recipientEmail,
+      recipientName: recipientName || '',
+      amount: parseFloat(amount),
+      status: paymentIntent.status,
+      stripeId: paymentIntent.id
+    });
+
+    if (submissionId) {
+      db.updateSubmission(submissionId, { payoutStatus: 'initiated', payoutId: paymentIntent.id });
+    }
+
+    res.json({ success: true, payout, stripePaymentIntent: paymentIntent });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+api.post('/stripe/transfer', async (req, res) => {
+  try {
+    if (!appConfig.stripeSecretKey) {
+      return res.status(400).json({ error: 'Stripe is not configured' });
+    }
+
+    const { amount, destinationAccountId, description, submissionId } = req.body;
+    if (!amount || !destinationAccountId) {
+      return res.status(400).json({ error: 'amount and destinationAccountId are required' });
+    }
+
+    const stripe = new StripePayouts(appConfig.stripeSecretKey);
+    const transfer = await stripe.createTransfer({
+      amount: parseFloat(amount),
+      destination: destinationAccountId,
+      description: description || `Transfer for submission ${submissionId}`,
+      metadata: { submissionId: submissionId || '' }
+    });
+
+    const payout = db.addPayout({
+      id: transfer.id,
+      submissionId: submissionId || '',
+      destinationAccountId,
+      amount: parseFloat(amount),
+      status: 'transferred',
+      stripeId: transfer.id,
+      type: 'transfer'
+    });
+
+    if (submissionId) {
+      db.updateSubmission(submissionId, { payoutStatus: 'transferred', payoutId: transfer.id });
+    }
+
+    res.json({ success: true, payout, stripeTransfer: transfer });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+api.get('/stripe/balance', async (req, res) => {
+  try {
+    if (!appConfig.stripeSecretKey) {
+      return res.status(400).json({ error: 'Stripe is not configured' });
+    }
+    const stripe = new StripePayouts(appConfig.stripeSecretKey);
+    const balance = await stripe.getBalance();
+    res.json({ success: true, balance });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+api.get('/payouts', (req, res) => {
+  res.json({ payouts: db.getPayouts() });
+});
+
 app.use('/api', api);
 
 // ── Static + SPA Fallback ───────────────────────────────────────────────────
