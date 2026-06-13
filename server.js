@@ -290,6 +290,147 @@ api.post('/a2a/user-jwt', (req, res) => {
   }
 });
 
+// ── IRIS Transmission Routes ────────────────────────────────────────────────
+
+const A2AAuth = require('./lib/a2a-auth');
+const IRISClient = require('./lib/iris-client');
+const { buildManifest, buildTransmissionXML, FORM_TYPES } = require('./lib/iris-builder');
+
+let appConfig = {
+  clientId: null,
+  privateKeyPem: null,
+  environment: 'test',
+  transmitterTIN: null,
+  transmitterName: null
+};
+
+api.post('/config/save', (req, res) => {
+  const { clientId, privateKeyPem, environment, transmitterTIN, transmitterName } = req.body;
+  if (clientId) appConfig.clientId = clientId;
+  if (privateKeyPem) appConfig.privateKeyPem = privateKeyPem;
+  if (environment) appConfig.environment = environment;
+  if (transmitterTIN) appConfig.transmitterTIN = transmitterTIN;
+  if (transmitterName) appConfig.transmitterName = transmitterName;
+  res.json({ success: true, config: { ...appConfig, privateKeyPem: appConfig.privateKeyPem ? '[SET]' : null } });
+});
+
+api.get('/config', (req, res) => {
+  res.json({
+    clientId: appConfig.clientId,
+    hasPrivateKey: !!appConfig.privateKeyPem,
+    environment: appConfig.environment,
+    transmitterTIN: appConfig.transmitterTIN,
+    transmitterName: appConfig.transmitterName
+  });
+});
+
+api.post('/iris/build-xml', (req, res) => {
+  try {
+    const { formType, records, taxYear } = req.body;
+
+    if (!formType || !records || !records.length) {
+      return res.status(400).json({ error: 'formType and records are required' });
+    }
+
+    if (!FORM_TYPES[formType]) {
+      return res.status(400).json({ error: `Unsupported form type: ${formType}. Supported: ${Object.keys(FORM_TYPES).join(', ')}` });
+    }
+
+    const manifest = buildManifest({
+      transmitterTIN: appConfig.transmitterTIN || 'PENDING',
+      transmitterName: appConfig.transmitterName || 'PENDING',
+      taxYear: taxYear || String(new Date().getFullYear()),
+      totalPayeeCount: records.length
+    });
+
+    const xml = buildTransmissionXML({ manifest, formType, records });
+
+    res.json({ success: true, xml, manifest });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+api.post('/iris/submit', async (req, res) => {
+  try {
+    const { formType, records, taxYear, userId } = req.body;
+
+    if (!appConfig.clientId || !appConfig.privateKeyPem) {
+      return res.status(400).json({ error: 'API configuration is incomplete. Set your Client ID and private key first.' });
+    }
+
+    if (!formType || !records || !records.length) {
+      return res.status(400).json({ error: 'formType and records are required' });
+    }
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required for A2A authentication' });
+    }
+
+    const manifest = buildManifest({
+      transmitterTIN: appConfig.transmitterTIN,
+      transmitterName: appConfig.transmitterName,
+      taxYear: taxYear || String(new Date().getFullYear()),
+      totalPayeeCount: records.length
+    });
+
+    const xml = buildTransmissionXML({ manifest, formType, records });
+
+    const auth = new A2AAuth({
+      clientId: appConfig.clientId,
+      privateKeyPem: appConfig.privateKeyPem,
+      environment: appConfig.environment
+    });
+
+    const accessToken = await auth.getAccessToken(userId);
+
+    const irisClient = new IRISClient({ environment: appConfig.environment });
+    const result = await irisClient.submitTransmission(accessToken, xml);
+
+    res.json({
+      success: true,
+      transmissionId: manifest.UniqueTransmissionId,
+      irsResponse: result
+    });
+  } catch (err) {
+    const status = err.response ? err.response.status : 500;
+    const detail = err.response ? err.response.data : err.message;
+    res.status(status).json({ error: 'Submission failed', detail });
+  }
+});
+
+api.get('/iris/status/:transmissionId', async (req, res) => {
+  try {
+    if (!appConfig.clientId || !appConfig.privateKeyPem) {
+      return res.status(400).json({ error: 'API configuration is incomplete' });
+    }
+
+    const { userId } = req.query;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId query parameter is required' });
+    }
+
+    const auth = new A2AAuth({
+      clientId: appConfig.clientId,
+      privateKeyPem: appConfig.privateKeyPem,
+      environment: appConfig.environment
+    });
+
+    const accessToken = await auth.getAccessToken(userId);
+    const irisClient = new IRISClient({ environment: appConfig.environment });
+    const result = await irisClient.getTransmissionStatus(accessToken, req.params.transmissionId);
+
+    res.json({ success: true, status: result });
+  } catch (err) {
+    const detail = err.response ? err.response.data : err.message;
+    res.status(500).json({ error: 'Status check failed', detail });
+  }
+});
+
+api.get('/iris/form-types', (req, res) => {
+  res.json({ formTypes: Object.keys(FORM_TYPES) });
+});
+
 app.use('/api', api);
 
 // ── Static + SPA Fallback ───────────────────────────────────────────────────

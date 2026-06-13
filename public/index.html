@@ -337,6 +337,12 @@
       <div class="nav-item" data-page="a2a">
         <span class="nav-icon">&#128274;</span> A2A OAuth
       </div>
+      <div class="nav-item" data-page="transmit">
+        <span class="nav-icon">&#128228;</span> Transmit 1099
+      </div>
+      <div class="nav-item" data-page="settings">
+        <span class="nav-icon">&#9881;</span> Settings
+      </div>
       <div class="nav-item" data-page="dashboard">
         <span class="nav-icon">&#128200;</span> Dashboard
       </div>
@@ -547,6 +553,194 @@ MIIxxxxxx...
             <li>Access token expires - repeat steps 1-3 when needed</li>
           </ol>
         </div>
+      </div>
+
+      <!-- ── Transmit 1099 Page ──────────────────────────────── -->
+      <div id="page-transmit" class="page hidden">
+        <div class="page-header">
+          <h2>Transmit 1099</h2>
+          <p>Build and submit 1099 information returns via IRS IRIS API</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#128196; Form Details</div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Form Type</label>
+              <select id="tx-form-type">
+                <option value="1099-MISC">1099-MISC</option>
+                <option value="1099-A">1099-A</option>
+                <option value="1099-B">1099-B</option>
+                <option value="1099-C">1099-C</option>
+                <option value="1099-OID">1099-OID</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Tax Year</label>
+              <select id="tx-tax-year">
+                <option value="2025">2025</option>
+                <option value="2024">2024</option>
+                <option value="2026">2026</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#127970; Payer Information</div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Payer TIN (EIN or SSN)</label>
+              <input type="text" id="tx-payer-tin" placeholder="XX-XXXXXXX">
+            </div>
+            <div class="form-group">
+              <label>Payer Name</label>
+              <input type="text" id="tx-payer-name" placeholder="Company or individual name">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Street Address</label>
+            <input type="text" id="tx-payer-street" placeholder="123 Main St">
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>City</label>
+              <input type="text" id="tx-payer-city" placeholder="City">
+            </div>
+            <div class="form-group">
+              <label>State</label>
+              <input type="text" id="tx-payer-state" placeholder="XX" maxlength="2">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Zip Code</label>
+            <input type="text" id="tx-payer-zip" placeholder="XXXXX">
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#128100; Recipient Information</div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Recipient TIN (SSN or EIN)</label>
+              <input type="text" id="tx-recip-tin" placeholder="XXX-XX-XXXX">
+            </div>
+            <div class="form-group">
+              <label>Recipient Name</label>
+              <input type="text" id="tx-recip-name" placeholder="Full name">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Street Address</label>
+            <input type="text" id="tx-recip-street" placeholder="123 Main St">
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>City</label>
+              <input type="text" id="tx-recip-city" placeholder="City">
+            </div>
+            <div class="form-group">
+              <label>State</label>
+              <input type="text" id="tx-recip-state" placeholder="XX" maxlength="2">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Zip Code</label>
+            <input type="text" id="tx-recip-zip" placeholder="XXXXX">
+          </div>
+        </div>
+
+        <div class="card" id="tx-misc-fields">
+          <div class="card-title">&#128176; 1099-MISC Amounts</div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Rents (Box 1)</label>
+              <input type="text" id="tx-rents" placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>Royalties (Box 2)</label>
+              <input type="text" id="tx-royalties" placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>Other Income (Box 3)</label>
+              <input type="text" id="tx-other-income" placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>Federal Tax Withheld (Box 4)</label>
+              <input type="text" id="tx-fed-withheld" placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>Medical Payments (Box 6)</label>
+              <input type="text" id="tx-medical" placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>Gross Proceeds (Box 10)</label>
+              <input type="text" id="tx-gross-proceeds" placeholder="0.00">
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-group" style="margin-bottom: 24px;">
+          <button class="btn btn-primary" onclick="previewXML()">&#128196; Preview XML</button>
+          <button class="btn btn-secondary" onclick="submitToIRS()">&#128228; Submit to IRS</button>
+        </div>
+
+        <div id="tx-result" class="hidden">
+          <div class="card">
+            <div class="card-title" id="tx-result-title">Transmission XML</div>
+            <div class="output-box" id="tx-xml-output">
+              <button class="copy-btn" onclick="copyToClipboard('tx-xml-output')">Copy</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Settings Page ───────────────────────────────────── -->
+      <div id="page-settings" class="page hidden">
+        <div class="page-header">
+          <h2>Settings</h2>
+          <p>Configure your IRS API connection and transmitter details</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#128274; API Configuration</div>
+          <div class="form-group">
+            <label>API Client ID</label>
+            <input type="text" id="cfg-client-id" placeholder="e99a2a3b-47a4-4317-913e-b93c7bb8b718">
+          </div>
+          <div class="form-group">
+            <label>Private Key (PEM)</label>
+            <textarea id="cfg-private-key" rows="6" placeholder="-----BEGIN RSA PRIVATE KEY-----
+...
+-----END RSA PRIVATE KEY-----"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Environment</label>
+            <select id="cfg-environment">
+              <option value="test">Test (api.test.irs.gov)</option>
+              <option value="production">Production (api.irs.gov)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#127970; Transmitter Details</div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Transmitter TIN</label>
+              <input type="text" id="cfg-tin" placeholder="XX-XXXXXXX">
+            </div>
+            <div class="form-group">
+              <label>Transmitter Name</label>
+              <input type="text" id="cfg-name" placeholder="Your organization name">
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="saveConfig()">&#128190; Save Configuration</button>
+        </div>
+        <div id="cfg-result" style="margin-top: 16px;"></div>
       </div>
 
       <!-- ── Dashboard Page ─────────────────────────────────── -->
@@ -857,6 +1051,143 @@ MIIxxxxxx...
       copyBtn.textContent = 'Copy';
       copyBtn.onclick = () => copyToClipboard('a2a-jwt-output');
       el.appendChild(copyBtn);
+    }
+
+    // ── Settings ─────────────────────────────────────────────
+    async function saveConfig() {
+      const config = {
+        clientId: document.getElementById('cfg-client-id').value.trim(),
+        privateKeyPem: document.getElementById('cfg-private-key').value.trim(),
+        environment: document.getElementById('cfg-environment').value,
+        transmitterTIN: document.getElementById('cfg-tin').value.trim(),
+        transmitterName: document.getElementById('cfg-name').value.trim()
+      };
+
+      try {
+        const res = await fetch('/api/config/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        document.getElementById('cfg-result').innerHTML = '<div class="alert alert-success">Configuration saved successfully.</div>';
+      } catch (err) {
+        document.getElementById('cfg-result').innerHTML = `<div class="alert alert-error">Error: ${err.message}</div>`;
+      }
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        if (data.clientId) document.getElementById('cfg-client-id').value = data.clientId;
+        if (data.environment) document.getElementById('cfg-environment').value = data.environment;
+        if (data.transmitterTIN) document.getElementById('cfg-tin').value = data.transmitterTIN;
+        if (data.transmitterName) document.getElementById('cfg-name').value = data.transmitterName;
+      } catch (_) {}
+    }
+    loadConfig();
+
+    // ── 1099 Transmission ───────────────────────────────────
+    function getFormRecord() {
+      const formType = document.getElementById('tx-form-type').value;
+      const base = {
+        payerTIN: document.getElementById('tx-payer-tin').value.trim(),
+        payerName: document.getElementById('tx-payer-name').value.trim(),
+        payerStreet: document.getElementById('tx-payer-street').value.trim(),
+        payerCity: document.getElementById('tx-payer-city').value.trim(),
+        payerState: document.getElementById('tx-payer-state').value.trim(),
+        payerZip: document.getElementById('tx-payer-zip').value.trim(),
+        recipientTIN: document.getElementById('tx-recip-tin').value.trim(),
+        recipientName: document.getElementById('tx-recip-name').value.trim(),
+        recipientStreet: document.getElementById('tx-recip-street').value.trim(),
+        recipientCity: document.getElementById('tx-recip-city').value.trim(),
+        recipientState: document.getElementById('tx-recip-state').value.trim(),
+        recipientZip: document.getElementById('tx-recip-zip').value.trim()
+      };
+
+      if (formType === '1099-MISC') {
+        base.rents = document.getElementById('tx-rents').value.trim() || '0.00';
+        base.royalties = document.getElementById('tx-royalties').value.trim() || '0.00';
+        base.otherIncome = document.getElementById('tx-other-income').value.trim() || '0.00';
+        base.federalTaxWithheld = document.getElementById('tx-fed-withheld').value.trim() || '0.00';
+        base.medicalPayments = document.getElementById('tx-medical').value.trim() || '0.00';
+        base.grossProceeds = document.getElementById('tx-gross-proceeds').value.trim() || '0.00';
+      }
+
+      return base;
+    }
+
+    async function previewXML() {
+      const formType = document.getElementById('tx-form-type').value;
+      const taxYear = document.getElementById('tx-tax-year').value;
+      const record = getFormRecord();
+
+      try {
+        const res = await fetch('/api/iris/build-xml', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ formType, records: [record], taxYear })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        document.getElementById('tx-result').classList.remove('hidden');
+        document.getElementById('tx-result-title').textContent = 'Transmission XML Preview';
+        const el = document.getElementById('tx-xml-output');
+        el.textContent = data.xml;
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.textContent = 'Copy';
+        copyBtn.onclick = () => copyToClipboard('tx-xml-output');
+        el.appendChild(copyBtn);
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function submitToIRS() {
+      const formType = document.getElementById('tx-form-type').value;
+      const taxYear = document.getElementById('tx-tax-year').value;
+      const record = getFormRecord();
+
+      if (!record.payerTIN || !record.recipientTIN) {
+        alert('Payer TIN and Recipient TIN are required');
+        return;
+      }
+
+      if (!confirm('Are you sure you want to submit this 1099 to the IRS? This will transmit to the ' +
+          document.getElementById('cfg-environment').value.toUpperCase() + ' environment.')) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/iris/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            formType,
+            records: [record],
+            taxYear,
+            userId: document.getElementById('cfg-client-id').value.trim()
+          })
+        });
+
+        const data = await res.json();
+
+        document.getElementById('tx-result').classList.remove('hidden');
+        if (!res.ok) {
+          document.getElementById('tx-result-title').textContent = 'Submission Error';
+          document.getElementById('tx-xml-output').textContent = JSON.stringify(data, null, 2);
+        } else {
+          document.getElementById('tx-result-title').textContent = 'Submission Successful';
+          document.getElementById('tx-xml-output').textContent = JSON.stringify(data, null, 2);
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
     }
 
     // ── Utility ─────────────────────────────────────────────
