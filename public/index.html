@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IRS IRIS - A2A Integration Platform</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #232733;
+      --border: #2d3140;
+      --text: #e4e7ef;
+      --text-dim: #8b90a0;
+      --accent: #4f7df9;
+      --accent-hover: #3d6ce8;
+      --success: #34d399;
+      --error: #f87171;
+      --warning: #fbbf24;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────── */
+    .app { display: flex; min-height: 100vh; }
+
+    .sidebar {
+      width: 260px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 0;
+      flex-shrink: 0;
+    }
+
+    .sidebar-logo {
+      padding: 0 24px 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .sidebar-logo h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .sidebar-logo span {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 24px;
+      cursor: pointer;
+      color: var(--text-dim);
+      transition: all 0.15s;
+      font-size: 14px;
+      border-left: 3px solid transparent;
+    }
+
+    .nav-item:hover { background: var(--surface2); color: var(--text); }
+    .nav-item.active {
+      color: var(--accent);
+      background: rgba(79, 125, 249, 0.08);
+      border-left-color: var(--accent);
+    }
+
+    .nav-icon { font-size: 18px; width: 24px; text-align: center; }
+
+    .main { flex: 1; padding: 32px 40px; overflow-y: auto; }
+
+    .page-header {
+      margin-bottom: 32px;
+    }
+
+    .page-header h2 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .page-header p { color: var(--text-dim); font-size: 14px; }
+
+    /* ── Cards ────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Forms ────────────────────────────────────────────────── */
+    .form-group { margin-bottom: 20px; }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    textarea, input[type="text"], input[type="password"], select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      resize: vertical;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus, input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); }
+
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover { background: var(--border); }
+
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Output / Results ─────────────────────────────────────── */
+    .output-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 400px;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .copy-btn:hover { color: var(--text); background: var(--border); }
+
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+
+    .alert-success { background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); color: var(--success); }
+    .alert-error { background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--error); }
+    .alert-warning { background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); color: var(--warning); }
+    .alert-info { background: rgba(79, 125, 249, 0.1); border: 1px solid rgba(79, 125, 249, 0.3); color: var(--accent); }
+
+    .cert-info {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .cert-info dt { color: var(--text-dim); }
+    .cert-info dd { color: var(--text); word-break: break-all; }
+
+    .steps-list {
+      list-style: none;
+      counter-reset: steps;
+    }
+
+    .steps-list li {
+      counter-increment: steps;
+      padding: 8px 0 8px 36px;
+      position: relative;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    .steps-list li::before {
+      content: counter(steps);
+      position: absolute;
+      left: 0;
+      width: 24px;
+      height: 24px;
+      background: var(--surface2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-success { background: rgba(52, 211, 153, 0.15); color: var(--success); }
+    .badge-error { background: rgba(248, 113, 113, 0.15); color: var(--error); }
+    .badge-warning { background: rgba(251, 191, 36, 0.15); color: var(--warning); }
+
+    .hidden { display: none; }
+
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 4px;
+      margin-bottom: 24px;
+    }
+
+    .tab {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--text-dim);
+      border: none;
+      background: transparent;
+      transition: all 0.15s;
+    }
+
+    .tab.active { background: var(--accent); color: white; }
+    .tab:hover:not(.active) { color: var(--text); }
+
+    .file-upload {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .file-upload:hover { border-color: var(--accent); }
+    .file-upload input { display: none; }
+    .file-upload p { color: var(--text-dim); font-size: 13px; }
+
+    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .main { padding: 20px; }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <nav class="sidebar">
+      <div class="sidebar-logo">
+        <h1>IRS IRIS</h1>
+        <span>A2A Integration Platform</span>
+      </div>
+      <div class="nav-item active" data-page="jwk">
+        <span class="nav-icon">&#128273;</span> JWK Generator
+      </div>
+      <div class="nav-item" data-page="validate">
+        <span class="nav-icon">&#9989;</span> JWK Validator
+      </div>
+      <div class="nav-item" data-page="a2a">
+        <span class="nav-icon">&#128274;</span> A2A OAuth
+      </div>
+      <div class="nav-item" data-page="dashboard">
+        <span class="nav-icon">&#128200;</span> Dashboard
+      </div>
+    </nav>
+
+    <main class="main">
+      <!-- ── JWK Generator Page ─────────────────────────────── -->
+      <div id="page-jwk" class="page">
+        <div class="page-header">
+          <h2>JWK Generator</h2>
+          <p>Generate IRS-compliant JWK from your PEM certificate and private key</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#128203; Instructions</div>
+          <ol class="steps-list">
+            <li>Paste your PEM-encoded certificate (public cert) below</li>
+            <li>Paste your PEM-encoded private key</li>
+            <li>Click "Generate JWK" to create the JWKS</li>
+            <li>Copy the JWKS output and paste it into the IRS API Client ID application</li>
+          </ol>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">&#128196; Certificate (Public)</div>
+            <div class="form-group">
+              <label>PEM Certificate</label>
+              <textarea id="cert-pem" rows="10" placeholder="-----BEGIN CERTIFICATE-----
+MIIxxxxxx...
+-----END CERTIFICATE-----"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Or upload file</label>
+              <div class="file-upload" onclick="document.getElementById('cert-file').click()">
+                <input type="file" id="cert-file" accept=".pem,.cer,.crt">
+                <p>Click to upload .pem, .cer, or .crt file</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">&#128272; Private Key</div>
+            <div class="form-group">
+              <label>PEM Private Key</label>
+              <textarea id="key-pem" rows="10" placeholder="-----BEGIN RSA PRIVATE KEY-----
+MIIxxxxxx...
+-----END RSA PRIVATE KEY-----"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Or upload file</label>
+              <div class="file-upload" onclick="document.getElementById('key-file').click()">
+                <input type="file" id="key-file" accept=".pem,.key">
+                <p>Click to upload .pem or .key file</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-group" style="margin-bottom: 24px;">
+          <button class="btn btn-primary" id="btn-generate" onclick="generateJWK()">
+            &#128273; Generate JWK
+          </button>
+        </div>
+
+        <div id="jwk-result" class="hidden">
+          <div id="cert-info-card" class="card hidden">
+            <div class="card-title">&#128203; Certificate Information</div>
+            <div id="cert-alert"></div>
+            <dl class="cert-info" id="cert-info-grid"></dl>
+          </div>
+
+          <div class="card">
+            <div class="card-title">&#128273; JWKS (paste this into IRS application)</div>
+            <div class="output-box" id="jwks-output">
+              <button class="copy-btn" onclick="copyToClipboard('jwks-output')">Copy</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">&#128274; Private JWK (keep this secure - needed for JWT signing)</div>
+            <div class="alert alert-warning">Do not share this with anyone. Store it securely. You will need it for A2A authentication.</div>
+            <div class="output-box" id="private-jwk-output">
+              <button class="copy-btn" onclick="copyToClipboard('private-jwk-output')">Copy</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── JWK Validator Page ─────────────────────────────── -->
+      <div id="page-validate" class="page hidden">
+        <div class="page-header">
+          <h2>JWK Validator</h2>
+          <p>Validate your JWK against IRS Publication 5718 requirements</p>
+        </div>
+
+        <div class="card">
+          <div class="form-group">
+            <label>Paste your JWK JSON</label>
+            <textarea id="validate-input" rows="12" placeholder='{"kty":"RSA","kid":"...","use":"sig","n":"...","e":"AQAB","x5c":["..."],"x5t":"..."}'></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="validateJWK()">&#9989; Validate JWK</button>
+        </div>
+
+        <div id="validate-result" class="hidden">
+          <div class="card" id="validate-result-card"></div>
+        </div>
+      </div>
+
+      <!-- ── A2A OAuth Page ─────────────────────────────────── -->
+      <div id="page-a2a" class="page hidden">
+        <div class="page-header">
+          <h2>A2A OAuth Authentication</h2>
+          <p>Generate Client JWT and User JWT for IRS API access</p>
+        </div>
+
+        <div class="alert alert-info">
+          You need your API Client ID from IRS before using this section. Generate your JWK first, submit it to IRS, and obtain your Client ID.
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#9881; Configuration</div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>API Client ID (from IRS)</label>
+              <input type="text" id="a2a-client-id" placeholder="Your IRS API Client ID">
+            </div>
+            <div class="form-group">
+              <label>User ID (for User JWT)</label>
+              <input type="text" id="a2a-user-id" placeholder="User identifier">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Private Key (PEM)</label>
+            <textarea id="a2a-private-key" rows="8" placeholder="-----BEGIN RSA PRIVATE KEY-----
+...
+-----END RSA PRIVATE KEY-----"></textarea>
+          </div>
+          <div class="form-group">
+            <label>IRS Token URL (optional, defaults to production)</label>
+            <input type="text" id="a2a-token-url" placeholder="https://api.irs.gov/auth/oauth/v2/token">
+          </div>
+        </div>
+
+        <div class="btn-group" style="margin-bottom: 24px;">
+          <button class="btn btn-primary" onclick="generateClientJWT()">&#128274; Generate Client JWT</button>
+          <button class="btn btn-secondary" onclick="generateUserJWT()">&#128100; Generate User JWT</button>
+        </div>
+
+        <div id="a2a-result" class="hidden">
+          <div class="card">
+            <div class="card-title" id="a2a-result-title">Generated JWT</div>
+            <div class="output-box" id="a2a-jwt-output">
+              <button class="copy-btn" onclick="copyToClipboard('a2a-jwt-output')">Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-title">&#128203; A2A OAuth Flow (Pub 5718, Section 3)</div>
+          <ol class="steps-list">
+            <li>Generate Client JWT (signed with your private key, identifies your application)</li>
+            <li>Generate User JWT (signed with your private key, identifies the user/taxpayer)</li>
+            <li>Send both JWTs to IRS Authorization Server to request an access token</li>
+            <li>Use the access token to call IRS IRIS API endpoints</li>
+            <li>Access token expires - repeat steps 1-3 when needed</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- ── Dashboard Page ─────────────────────────────────── -->
+      <div id="page-dashboard" class="page hidden">
+        <div class="page-header">
+          <h2>Dashboard</h2>
+          <p>Transmission overview and status</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">&#128200; Supported Forms</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              <span class="badge badge-success">1099-A</span>
+              <span class="badge badge-success">1099-B</span>
+              <span class="badge badge-success">1099-C</span>
+              <span class="badge badge-success">1099-MISC</span>
+              <span class="badge badge-success">1099-OID</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">&#9881; System Status</div>
+            <dl class="cert-info">
+              <dt>API Connection</dt>
+              <dd><span class="badge badge-warning">Awaiting Client ID</span></dd>
+              <dt>Certificate</dt>
+              <dd><span class="badge badge-warning">Not loaded</span></dd>
+              <dt>Stripe</dt>
+              <dd><span class="badge badge-warning">Not configured</span></dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#128203; Next Steps</div>
+          <ol class="steps-list">
+            <li>Generate your JWK from the JWK Generator page</li>
+            <li>Submit the JWKS to the IRS API Client ID application</li>
+            <li>Obtain your API Client ID from the IRS</li>
+            <li>Configure A2A OAuth with your Client ID and private key</li>
+            <li>Start transmitting information returns via the IRIS API</li>
+          </ol>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // ── Navigation ──────────────────────────────────────────
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+        document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+        item.classList.add('active');
+        document.getElementById('page-' + item.dataset.page).classList.remove('hidden');
+      });
+    });
+
+    // ── File Upload Handlers ────────────────────────────────
+    document.getElementById('cert-file').addEventListener('change', function(e) {
+      const reader = new FileReader();
+      reader.onload = (ev) => { document.getElementById('cert-pem').value = ev.target.result; };
+      reader.readAsText(e.target.files[0]);
+    });
+
+    document.getElementById('key-file').addEventListener('change', function(e) {
+      const reader = new FileReader();
+      reader.onload = (ev) => { document.getElementById('key-pem').value = ev.target.result; };
+      reader.readAsText(e.target.files[0]);
+    });
+
+    // ── JWK Generation ──────────────────────────────────────
+    async function generateJWK() {
+      const certPem = document.getElementById('cert-pem').value.trim();
+      const privateKeyPem = document.getElementById('key-pem').value.trim();
+
+      if (!certPem) {
+        alert('Please provide your PEM certificate');
+        return;
+      }
+
+      const btn = document.getElementById('btn-generate');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Generating...';
+
+      try {
+        const res = await fetch('/api/jwk/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ certPem, privateKeyPem })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error);
+
+        document.getElementById('jwk-result').classList.remove('hidden');
+
+        const jwksEl = document.getElementById('jwks-output');
+        jwksEl.textContent = JSON.stringify(data.jwks, null, 2);
+        const copyBtn1 = document.createElement('button');
+        copyBtn1.className = 'copy-btn';
+        copyBtn1.textContent = 'Copy';
+        copyBtn1.onclick = () => copyToClipboard('jwks-output');
+        jwksEl.appendChild(copyBtn1);
+
+        if (data.privateJwk) {
+          const privEl = document.getElementById('private-jwk-output');
+          privEl.textContent = JSON.stringify(data.privateJwk, null, 2);
+          const copyBtn2 = document.createElement('button');
+          copyBtn2.className = 'copy-btn';
+          copyBtn2.textContent = 'Copy';
+          copyBtn2.onclick = () => copyToClipboard('private-jwk-output');
+          privEl.appendChild(copyBtn2);
+        }
+
+        if (data.certInfo) {
+          const infoCard = document.getElementById('cert-info-card');
+          infoCard.classList.remove('hidden');
+
+          const alertEl = document.getElementById('cert-alert');
+          if (data.certInfo.isExpired) {
+            alertEl.innerHTML = '<div class="alert alert-error">Certificate is EXPIRED. You need to renew it before submitting to IRS.</div>';
+          } else {
+            alertEl.innerHTML = '<div class="alert alert-success">Certificate is valid and not expired.</div>';
+          }
+
+          document.getElementById('cert-info-grid').innerHTML = `
+            <dt>Subject</dt><dd>${data.certInfo.subject}</dd>
+            <dt>Issuer</dt><dd>${data.certInfo.issuer}</dd>
+            <dt>Valid From</dt><dd>${new Date(data.certInfo.validFrom).toLocaleDateString()}</dd>
+            <dt>Valid To</dt><dd>${new Date(data.certInfo.validTo).toLocaleDateString()}</dd>
+            <dt>Serial Number</dt><dd>${data.certInfo.serialNumber}</dd>
+            <dt>Status</dt><dd><span class="badge ${data.certInfo.isExpired ? 'badge-error' : 'badge-success'}">${data.certInfo.isExpired ? 'Expired' : 'Valid'}</span></dd>
+          `;
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '&#128273; Generate JWK';
+      }
+    }
+
+    // ── JWK Validation ──────────────────────────────────────
+    async function validateJWK() {
+      const input = document.getElementById('validate-input').value.trim();
+      if (!input) { alert('Please paste your JWK JSON'); return; }
+
+      let jwk;
+      try {
+        jwk = JSON.parse(input);
+        if (jwk.keys) jwk = jwk.keys[0];
+      } catch (e) {
+        alert('Invalid JSON');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/jwk/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jwk })
+        });
+
+        const data = await res.json();
+        const card = document.getElementById('validate-result-card');
+        document.getElementById('validate-result').classList.remove('hidden');
+
+        let html = '';
+        if (data.valid) {
+          html += '<div class="alert alert-success">JWK is valid for IRS submission.</div>';
+        } else {
+          html += '<div class="alert alert-error">JWK has errors that must be fixed before IRS submission.</div>';
+        }
+
+        if (data.errors && data.errors.length) {
+          html += '<div class="card-title" style="margin-top:12px;">Errors</div>';
+          data.errors.forEach(e => { html += `<div class="alert alert-error">${e}</div>`; });
+        }
+
+        if (data.warnings && data.warnings.length) {
+          html += '<div class="card-title" style="margin-top:12px;">Warnings</div>';
+          data.warnings.forEach(w => { html += `<div class="alert alert-warning">${w}</div>`; });
+        }
+
+        card.innerHTML = html;
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    // ── A2A JWT Generation ──────────────────────────────────
+    async function generateClientJWT() {
+      const clientId = document.getElementById('a2a-client-id').value.trim();
+      const privateKeyPem = document.getElementById('a2a-private-key').value.trim();
+      const tokenUrl = document.getElementById('a2a-token-url').value.trim();
+
+      if (!clientId || !privateKeyPem) {
+        alert('Client ID and Private Key are required');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/a2a/client-jwt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId, privateKeyPem, irsTokenUrl: tokenUrl || undefined })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        showJWTResult('Client JWT', data.clientJwt, data.expiresIn);
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function generateUserJWT() {
+      const clientId = document.getElementById('a2a-client-id').value.trim();
+      const userId = document.getElementById('a2a-user-id').value.trim();
+      const privateKeyPem = document.getElementById('a2a-private-key').value.trim();
+      const tokenUrl = document.getElementById('a2a-token-url').value.trim();
+
+      if (!clientId || !userId || !privateKeyPem) {
+        alert('Client ID, User ID, and Private Key are required');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/a2a/user-jwt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId, userId, privateKeyPem, irsTokenUrl: tokenUrl || undefined })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        showJWTResult('User JWT', data.userJwt, data.expiresIn);
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    function showJWTResult(title, token, expiresIn) {
+      document.getElementById('a2a-result').classList.remove('hidden');
+      document.getElementById('a2a-result-title').textContent = title + ` (expires in ${expiresIn}s)`;
+      const el = document.getElementById('a2a-jwt-output');
+      el.textContent = token;
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'copy-btn';
+      copyBtn.textContent = 'Copy';
+      copyBtn.onclick = () => copyToClipboard('a2a-jwt-output');
+      el.appendChild(copyBtn);
+    }
+
+    // ── Utility ─────────────────────────────────────────────
+    function copyToClipboard(elementId) {
+      const el = document.getElementById(elementId);
+      const text = el.textContent.replace('Copy', '').trim();
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = el.querySelector('.copy-btn');
+        if (btn) {
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+        }
+      });
+    }
+  </script>
+</body>
+</html>

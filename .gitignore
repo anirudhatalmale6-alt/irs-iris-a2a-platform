@@ -1,0 +1,5 @@
+node_modules/
+uploads/
+test-cert.pem
+test-key.pem
+.env
