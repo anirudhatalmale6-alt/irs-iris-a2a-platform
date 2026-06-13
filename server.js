@@ -101,6 +101,55 @@ api.get('/health', (req, res) => {
   res.json({ status: 'ok', version: '1.0.0' });
 });
 
+api.post('/jwk/generate-pfx', upload.single('pfx'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'PFX file is required' });
+    }
+
+    const pfxPassword = req.body.password || '';
+    const pfxBuf = fs.readFileSync(req.file.path);
+    const pfxAsn1 = forge.asn1.fromDer(pfxBuf.toString('binary'));
+    const pfx = forge.pkcs12.pkcs12FromAsn1(pfxAsn1, pfxPassword);
+
+    const certBags = pfx.getBags({ bagType: forge.pki.oids.certBag });
+    const keyBags = pfx.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag });
+
+    const certBag = (certBags[forge.pki.oids.certBag] || [])[0];
+    const keyBag = (keyBags[forge.pki.oids.pkcs8ShroudedKeyBag] || [])[0];
+
+    if (!certBag || !certBag.cert) {
+      return res.status(400).json({ error: 'No certificate found in PFX file' });
+    }
+
+    const certPem = forge.pki.certificateToPem(certBag.cert);
+    const privateKeyPem = keyBag && keyBag.key ? forge.pki.privateKeyToPem(keyBag.key) : null;
+
+    try { fs.unlinkSync(req.file.path); } catch (_) {}
+
+    const result = pemToJwk(certPem, privateKeyPem);
+
+    res.json({
+      success: true,
+      jwks: result.jwks,
+      privateJwk: result.privateJwk,
+      certInfo: result.certInfo,
+      instructions: [
+        'Copy the JWKS JSON below and paste it into the IRS API Client ID application.',
+        'Make sure to include the full JSON including the opening { and closing }.',
+        'The attributes are in the exact order required by IRS Publication 5718.',
+        'Keep your private JWK secure - you will need it to sign JWTs for A2A authentication.'
+      ]
+    });
+  } catch (err) {
+    if (req.file) { try { fs.unlinkSync(req.file.path); } catch (_) {} }
+    const msg = err.message.includes('Invalid password') || err.message.includes('PKCS#12')
+      ? 'Invalid PFX password or corrupted file. Please check the password and try again.'
+      : err.message;
+    res.status(400).json({ error: msg });
+  }
+});
+
 api.post('/jwk/generate', upload.fields([
   { name: 'cert', maxCount: 1 },
   { name: 'privateKey', maxCount: 1 }

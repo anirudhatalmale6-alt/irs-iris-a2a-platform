@@ -347,59 +347,101 @@
       <div id="page-jwk" class="page">
         <div class="page-header">
           <h2>JWK Generator</h2>
-          <p>Generate IRS-compliant JWK from your PEM certificate and private key</p>
+          <p>Generate IRS-compliant JWK from your certificate</p>
         </div>
 
-        <div class="card">
-          <div class="card-title">&#128203; Instructions</div>
-          <ol class="steps-list">
-            <li>Paste your PEM-encoded certificate (public cert) below</li>
-            <li>Paste your PEM-encoded private key</li>
-            <li>Click "Generate JWK" to create the JWKS</li>
-            <li>Copy the JWKS output and paste it into the IRS API Client ID application</li>
-          </ol>
+        <div class="tab-bar">
+          <button class="tab active" data-tab="pfx" onclick="switchTab('pfx')">PFX / PKCS#12 (Recommended)</button>
+          <button class="tab" data-tab="pem" onclick="switchTab('pem')">PEM Files</button>
         </div>
 
-        <div class="grid-2">
+        <!-- PFX Tab -->
+        <div id="tab-pfx" class="tab-content">
           <div class="card">
-            <div class="card-title">&#128196; Certificate (Public)</div>
+            <div class="card-title">&#128203; Instructions</div>
+            <ol class="steps-list">
+              <li>Upload your .pfx certificate file (contains both certificate and private key)</li>
+              <li>Enter the password you used when exporting the certificate</li>
+              <li>Click "Generate JWK" to create the JWKS</li>
+              <li>Copy the JWKS output and paste it into the IRS API Client ID application</li>
+            </ol>
+          </div>
+
+          <div class="card">
+            <div class="card-title">&#128274; PFX Certificate File</div>
             <div class="form-group">
-              <label>PEM Certificate</label>
-              <textarea id="cert-pem" rows="10" placeholder="-----BEGIN CERTIFICATE-----
+              <label>Upload .pfx or .p12 file</label>
+              <div class="file-upload" onclick="document.getElementById('pfx-file').click()">
+                <input type="file" id="pfx-file" accept=".pfx,.p12">
+                <p id="pfx-filename">Click to upload your .pfx or .p12 certificate file</p>
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>PFX Password</label>
+              <input type="password" id="pfx-password" placeholder="Enter the certificate password">
+            </div>
+          </div>
+
+          <div class="btn-group" style="margin: 24px 0;">
+            <button class="btn btn-primary" id="btn-generate-pfx" onclick="generateJWKFromPFX()">
+              &#128273; Generate JWK
+            </button>
+          </div>
+        </div>
+
+        <!-- PEM Tab -->
+        <div id="tab-pem" class="tab-content hidden">
+          <div class="card">
+            <div class="card-title">&#128203; Instructions</div>
+            <ol class="steps-list">
+              <li>Paste your PEM-encoded certificate (public cert) below</li>
+              <li>Paste your PEM-encoded private key</li>
+              <li>Click "Generate JWK" to create the JWKS</li>
+              <li>Copy the JWKS output and paste it into the IRS API Client ID application</li>
+            </ol>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">&#128196; Certificate (Public)</div>
+              <div class="form-group">
+                <label>PEM Certificate</label>
+                <textarea id="cert-pem" rows="10" placeholder="-----BEGIN CERTIFICATE-----
 MIIxxxxxx...
 -----END CERTIFICATE-----"></textarea>
-            </div>
-            <div class="form-group" style="margin-bottom:0">
-              <label>Or upload file</label>
-              <div class="file-upload" onclick="document.getElementById('cert-file').click()">
-                <input type="file" id="cert-file" accept=".pem,.cer,.crt">
-                <p>Click to upload .pem, .cer, or .crt file</p>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label>Or upload file</label>
+                <div class="file-upload" onclick="document.getElementById('cert-file').click()">
+                  <input type="file" id="cert-file" accept=".pem,.cer,.crt">
+                  <p>Click to upload .pem, .cer, or .crt file</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="card">
-            <div class="card-title">&#128272; Private Key</div>
-            <div class="form-group">
-              <label>PEM Private Key</label>
-              <textarea id="key-pem" rows="10" placeholder="-----BEGIN RSA PRIVATE KEY-----
+            <div class="card">
+              <div class="card-title">&#128272; Private Key</div>
+              <div class="form-group">
+                <label>PEM Private Key</label>
+                <textarea id="key-pem" rows="10" placeholder="-----BEGIN RSA PRIVATE KEY-----
 MIIxxxxxx...
 -----END RSA PRIVATE KEY-----"></textarea>
-            </div>
-            <div class="form-group" style="margin-bottom:0">
-              <label>Or upload file</label>
-              <div class="file-upload" onclick="document.getElementById('key-file').click()">
-                <input type="file" id="key-file" accept=".pem,.key">
-                <p>Click to upload .pem or .key file</p>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label>Or upload file</label>
+                <div class="file-upload" onclick="document.getElementById('key-file').click()">
+                  <input type="file" id="key-file" accept=".pem,.key">
+                  <p>Click to upload .pem or .key file</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="btn-group" style="margin-bottom: 24px;">
-          <button class="btn btn-primary" id="btn-generate" onclick="generateJWK()">
-            &#128273; Generate JWK
-          </button>
+          <div class="btn-group" style="margin: 24px 0;">
+            <button class="btn btn-primary" id="btn-generate" onclick="generateJWK()">
+              &#128273; Generate JWK
+            </button>
+          </div>
         </div>
 
         <div id="jwk-result" class="hidden">
@@ -563,7 +605,20 @@ MIIxxxxxx...
       });
     });
 
+    // ── Tab Switching ────────────────────────────────────────
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      document.getElementById('tab-' + tab).classList.remove('hidden');
+    }
+
     // ── File Upload Handlers ────────────────────────────────
+    document.getElementById('pfx-file').addEventListener('change', function(e) {
+      const name = e.target.files[0] ? e.target.files[0].name : 'Click to upload your .pfx or .p12 certificate file';
+      document.getElementById('pfx-filename').textContent = name;
+    });
+
     document.getElementById('cert-file').addEventListener('change', function(e) {
       const reader = new FileReader();
       reader.onload = (ev) => { document.getElementById('cert-pem').value = ev.target.result; };
@@ -576,7 +631,43 @@ MIIxxxxxx...
       reader.readAsText(e.target.files[0]);
     });
 
-    // ── JWK Generation ──────────────────────────────────────
+    // ── JWK Generation from PFX ─────────────────────────────
+    async function generateJWKFromPFX() {
+      const fileInput = document.getElementById('pfx-file');
+      const password = document.getElementById('pfx-password').value;
+
+      if (!fileInput.files[0]) {
+        alert('Please upload your .pfx certificate file');
+        return;
+      }
+
+      const btn = document.getElementById('btn-generate-pfx');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Generating...';
+
+      try {
+        const formData = new FormData();
+        formData.append('pfx', fileInput.files[0]);
+        formData.append('password', password);
+
+        const res = await fetch('/api/jwk/generate-pfx', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        showJWKResult(data);
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '&#128273; Generate JWK';
+      }
+    }
+
+    // ── JWK Generation from PEM ─────────────────────────────
     async function generateJWK() {
       const certPem = document.getElementById('cert-pem').value.trim();
       const privateKeyPem = document.getElementById('key-pem').value.trim();
@@ -601,51 +692,56 @@ MIIxxxxxx...
 
         if (!res.ok) throw new Error(data.error);
 
-        document.getElementById('jwk-result').classList.remove('hidden');
-
-        const jwksEl = document.getElementById('jwks-output');
-        jwksEl.textContent = JSON.stringify(data.jwks, null, 2);
-        const copyBtn1 = document.createElement('button');
-        copyBtn1.className = 'copy-btn';
-        copyBtn1.textContent = 'Copy';
-        copyBtn1.onclick = () => copyToClipboard('jwks-output');
-        jwksEl.appendChild(copyBtn1);
-
-        if (data.privateJwk) {
-          const privEl = document.getElementById('private-jwk-output');
-          privEl.textContent = JSON.stringify(data.privateJwk, null, 2);
-          const copyBtn2 = document.createElement('button');
-          copyBtn2.className = 'copy-btn';
-          copyBtn2.textContent = 'Copy';
-          copyBtn2.onclick = () => copyToClipboard('private-jwk-output');
-          privEl.appendChild(copyBtn2);
-        }
-
-        if (data.certInfo) {
-          const infoCard = document.getElementById('cert-info-card');
-          infoCard.classList.remove('hidden');
-
-          const alertEl = document.getElementById('cert-alert');
-          if (data.certInfo.isExpired) {
-            alertEl.innerHTML = '<div class="alert alert-error">Certificate is EXPIRED. You need to renew it before submitting to IRS.</div>';
-          } else {
-            alertEl.innerHTML = '<div class="alert alert-success">Certificate is valid and not expired.</div>';
-          }
-
-          document.getElementById('cert-info-grid').innerHTML = `
-            <dt>Subject</dt><dd>${data.certInfo.subject}</dd>
-            <dt>Issuer</dt><dd>${data.certInfo.issuer}</dd>
-            <dt>Valid From</dt><dd>${new Date(data.certInfo.validFrom).toLocaleDateString()}</dd>
-            <dt>Valid To</dt><dd>${new Date(data.certInfo.validTo).toLocaleDateString()}</dd>
-            <dt>Serial Number</dt><dd>${data.certInfo.serialNumber}</dd>
-            <dt>Status</dt><dd><span class="badge ${data.certInfo.isExpired ? 'badge-error' : 'badge-success'}">${data.certInfo.isExpired ? 'Expired' : 'Valid'}</span></dd>
-          `;
-        }
+        showJWKResult(data);
       } catch (err) {
         alert('Error: ' + err.message);
       } finally {
         btn.disabled = false;
         btn.innerHTML = '&#128273; Generate JWK';
+      }
+    }
+
+    // ── Shared Result Display ───────────────────────────────
+    function showJWKResult(data) {
+      document.getElementById('jwk-result').classList.remove('hidden');
+
+      const jwksEl = document.getElementById('jwks-output');
+      jwksEl.textContent = JSON.stringify(data.jwks, null, 2);
+      const copyBtn1 = document.createElement('button');
+      copyBtn1.className = 'copy-btn';
+      copyBtn1.textContent = 'Copy';
+      copyBtn1.onclick = () => copyToClipboard('jwks-output');
+      jwksEl.appendChild(copyBtn1);
+
+      if (data.privateJwk) {
+        const privEl = document.getElementById('private-jwk-output');
+        privEl.textContent = JSON.stringify(data.privateJwk, null, 2);
+        const copyBtn2 = document.createElement('button');
+        copyBtn2.className = 'copy-btn';
+        copyBtn2.textContent = 'Copy';
+        copyBtn2.onclick = () => copyToClipboard('private-jwk-output');
+        privEl.appendChild(copyBtn2);
+      }
+
+      if (data.certInfo) {
+        const infoCard = document.getElementById('cert-info-card');
+        infoCard.classList.remove('hidden');
+
+        const alertEl = document.getElementById('cert-alert');
+        if (data.certInfo.isExpired) {
+          alertEl.innerHTML = '<div class="alert alert-error">Certificate is EXPIRED. You need to renew it before submitting to IRS.</div>';
+        } else {
+          alertEl.innerHTML = '<div class="alert alert-success">Certificate is valid and not expired.</div>';
+        }
+
+        document.getElementById('cert-info-grid').innerHTML = `
+          <dt>Subject</dt><dd>${data.certInfo.subject}</dd>
+          <dt>Issuer</dt><dd>${data.certInfo.issuer}</dd>
+          <dt>Valid From</dt><dd>${new Date(data.certInfo.validFrom).toLocaleDateString()}</dd>
+          <dt>Valid To</dt><dd>${new Date(data.certInfo.validTo).toLocaleDateString()}</dd>
+          <dt>Serial Number</dt><dd>${data.certInfo.serialNumber}</dd>
+          <dt>Status</dt><dd><span class="badge ${data.certInfo.isExpired ? 'badge-error' : 'badge-success'}">${data.certInfo.isExpired ? 'Expired' : 'Valid'}</span></dd>
+        `;
       }
     }
 
