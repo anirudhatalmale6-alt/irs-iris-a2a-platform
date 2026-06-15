@@ -296,13 +296,23 @@ const A2AAuth = require('./lib/a2a-auth');
 const IRISClient = require('./lib/iris-client');
 const { buildManifest, buildTransmissionXML, FORM_TYPES } = require('./lib/iris-builder');
 
-let appConfig = {
-  clientId: null,
-  privateKeyPem: null,
-  environment: 'test',
-  transmitterTIN: null,
-  transmitterName: null
-};
+const CONFIG_FILE = path.join(__dirname, 'data', 'config.json');
+
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    }
+  } catch (e) { /* ignore corrupt config */ }
+  return { clientId: null, privateKeyPem: null, environment: 'test', transmitterTIN: null, transmitterName: null, stripeSecretKey: null };
+}
+
+function saveConfig() {
+  fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(appConfig, null, 2));
+}
+
+let appConfig = loadConfig();
 
 api.post('/config/save', (req, res) => {
   const { clientId, privateKeyPem, environment, transmitterTIN, transmitterName } = req.body;
@@ -311,7 +321,8 @@ api.post('/config/save', (req, res) => {
   if (environment) appConfig.environment = environment;
   if (transmitterTIN) appConfig.transmitterTIN = transmitterTIN;
   if (transmitterName) appConfig.transmitterName = transmitterName;
-  res.json({ success: true, config: { ...appConfig, privateKeyPem: appConfig.privateKeyPem ? '[SET]' : null } });
+  saveConfig();
+  res.json({ success: true, config: { ...appConfig, privateKeyPem: appConfig.privateKeyPem ? '[SET]' : null, stripeSecretKey: appConfig.stripeSecretKey ? '[SET]' : null } });
 });
 
 api.get('/config', (req, res) => {
@@ -320,7 +331,8 @@ api.get('/config', (req, res) => {
     hasPrivateKey: !!appConfig.privateKeyPem,
     environment: appConfig.environment,
     transmitterTIN: appConfig.transmitterTIN,
-    transmitterName: appConfig.transmitterName
+    transmitterName: appConfig.transmitterName,
+    hasStripeKey: !!appConfig.stripeSecretKey
   });
 });
 
@@ -478,6 +490,7 @@ api.post('/stripe/config', (req, res) => {
   const { stripeSecretKey } = req.body;
   if (!stripeSecretKey) return res.status(400).json({ error: 'stripeSecretKey is required' });
   appConfig.stripeSecretKey = stripeSecretKey;
+  saveConfig();
   res.json({ success: true, message: 'Stripe configured' });
 });
 
@@ -586,7 +599,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`IRS Finance App running on port ${PORT}`);
 });

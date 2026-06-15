@@ -4,3 +4,4 @@ test-cert.pem
 test-key.pem
 .env
 data/
+data/config.json
