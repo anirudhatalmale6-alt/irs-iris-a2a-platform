@@ -248,12 +248,13 @@ api.post('/jwk/validate', (req, res) => {
 
 api.post('/a2a/client-jwt', (req, res) => {
   try {
-    const { privateKeyPem, clientId, irsTokenUrl } = req.body;
+    const privateKeyPem = req.body.privateKeyPem || appConfig.privateKeyPem;
+    const clientId = req.body.clientId || appConfig.clientId;
     if (!privateKeyPem || !clientId) {
-      return res.status(400).json({ error: 'privateKeyPem and clientId are required' });
+      return res.status(400).json({ error: 'Private key and Client ID are required. Configure them in Settings.' });
     }
 
-    const tokenUrl = irsTokenUrl || 'https://api.irs.gov/auth/oauth/v2/token';
+    const tokenUrl = req.body.irsTokenUrl || (appConfig.environment === 'production' ? 'https://api.irs.gov/auth/oauth/v2/token' : 'https://api.test.irs.gov/auth/oauth/v2/token');
     const now = Math.floor(Date.now() / 1000);
     const payload = { iss: clientId, sub: clientId, aud: tokenUrl, iat: now, exp: now + 300 };
 
@@ -270,12 +271,14 @@ api.post('/a2a/client-jwt', (req, res) => {
 
 api.post('/a2a/user-jwt', (req, res) => {
   try {
-    const { privateKeyPem, clientId, userId, irsTokenUrl } = req.body;
+    const privateKeyPem = req.body.privateKeyPem || appConfig.privateKeyPem;
+    const clientId = req.body.clientId || appConfig.clientId;
+    const userId = req.body.userId;
     if (!privateKeyPem || !clientId || !userId) {
-      return res.status(400).json({ error: 'privateKeyPem, clientId, and userId are required' });
+      return res.status(400).json({ error: 'Private key, Client ID, and User ID are required. Configure key/ID in Settings.' });
     }
 
-    const tokenUrl = irsTokenUrl || 'https://api.irs.gov/auth/oauth/v2/token';
+    const tokenUrl = req.body.irsTokenUrl || (appConfig.environment === 'production' ? 'https://api.irs.gov/auth/oauth/v2/token' : 'https://api.test.irs.gov/auth/oauth/v2/token');
     const now = Math.floor(Date.now() / 1000);
     const payload = { iss: clientId, sub: userId, aud: tokenUrl, iat: now, exp: now + 300 };
 
@@ -285,6 +288,52 @@ api.post('/a2a/user-jwt', (req, res) => {
     });
 
     res.json({ success: true, userJwt: token, expiresIn: 300 });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+api.post('/a2a/get-access-token', async (req, res) => {
+  try {
+    const privateKeyPem = appConfig.privateKeyPem;
+    const clientId = appConfig.clientId;
+    const userId = req.body.userId || appConfig.transmitterTIN;
+    if (!privateKeyPem || !clientId) {
+      return res.status(400).json({ error: 'Private key and Client ID not configured. Go to Settings first.' });
+    }
+
+    const tokenUrl = appConfig.environment === 'production'
+      ? 'https://api.irs.gov/auth/oauth/v2/token'
+      : 'https://api.test.irs.gov/auth/oauth/v2/token';
+
+    const now = Math.floor(Date.now() / 1000);
+
+    const clientJwtPayload = { iss: clientId, sub: clientId, aud: tokenUrl, iat: now, exp: now + 300 };
+    const clientJwt = jwt.sign(clientJwtPayload, privateKeyPem, { algorithm: 'RS256', header: { alg: 'RS256', typ: 'JWT' } });
+
+    const userJwtPayload = { iss: clientId, sub: userId, aud: tokenUrl, iat: now, exp: now + 300 };
+    const userJwt = jwt.sign(userJwtPayload, privateKeyPem, { algorithm: 'RS256', header: { alg: 'RS256', typ: 'JWT' } });
+
+    const https = require('https');
+    const querystring = require('querystring');
+    const postData = querystring.stringify({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+      client_assertion: clientJwt,
+      user_assertion_type: 'urn:ietf:params:oauth:user-assertion-type:jwt-bearer',
+      user_assertion: userJwt
+    });
+
+    res.json({
+      success: true,
+      clientJwt,
+      userJwt,
+      tokenUrl,
+      environment: appConfig.environment,
+      userId,
+      postData,
+      message: 'JWTs generated. Use these to request an access token from the IRS Authorization Server.'
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

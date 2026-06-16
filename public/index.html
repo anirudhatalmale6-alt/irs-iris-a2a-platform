@@ -341,10 +341,10 @@
         <span class="nav-icon">&#128228;</span> Transmit 1099
       </div>
       <div class="nav-item" data-page="submissions">
-        <span class="nav-icon">&#128203;</span> Submissions
+        <span class="nav-icon">&#128203;</span> Credits
       </div>
       <div class="nav-item" data-page="payouts">
-        <span class="nav-icon">&#128176;</span> Payouts
+        <span class="nav-icon">&#128176;</span> Distribute
       </div>
       <div class="nav-item" data-page="settings">
         <span class="nav-icon">&#9881;</span> Settings
@@ -504,50 +504,69 @@ MIIxxxxxx...
       <div id="page-a2a" class="page hidden">
         <div class="page-header">
           <h2>A2A OAuth Authentication</h2>
-          <p>Generate Client JWT and User JWT for IRS API access</p>
+          <p>Generate access tokens for IRS IRIS API</p>
         </div>
 
-        <div class="alert alert-info">
-          You need your API Client ID from IRS before using this section. Generate your JWK first, submit it to IRS, and obtain your Client ID.
+        <div id="a2a-config-status" class="alert alert-info">
+          Checking configuration...
         </div>
 
         <div class="card">
-          <div class="card-title">&#9881; Configuration</div>
-          <div class="grid-2">
-            <div class="form-group">
-              <label>API Client ID (from IRS)</label>
-              <input type="text" id="a2a-client-id" placeholder="Your IRS API Client ID">
-            </div>
-            <div class="form-group">
-              <label>User ID (for User JWT)</label>
-              <input type="text" id="a2a-user-id" placeholder="User identifier">
-            </div>
-          </div>
+          <div class="card-title">&#9889; Quick Access Token (Recommended)</div>
+          <p style="color: var(--text-dim); margin-bottom: 16px;">One-click generates both JWTs and prepares your access token request using your saved settings.</p>
           <div class="form-group">
-            <label>Private Key (PEM)</label>
-            <textarea id="a2a-private-key" rows="8" placeholder="-----BEGIN RSA PRIVATE KEY-----
+            <label>User ID (defaults to your TIN)</label>
+            <input type="text" id="a2a-quick-user-id" placeholder="Will use your TIN if left blank">
+          </div>
+          <button class="btn btn-primary" onclick="quickGetAccessToken()" style="width: 100%; padding: 16px; font-size: 18px;">&#9889; Get Access Token</button>
+        </div>
+
+        <div id="a2a-token-result" class="hidden" style="margin-top: 24px;">
+          <div class="card">
+            <div class="card-title">&#9989; Access Token Request Ready</div>
+            <div id="a2a-token-details"></div>
+          </div>
+        </div>
+
+        <details style="margin-top: 24px;">
+          <summary style="cursor: pointer; color: var(--primary); font-weight: 600; padding: 12px 0;">&#128295; Advanced: Generate JWTs Manually</summary>
+          <div class="card" style="margin-top: 12px;">
+            <div class="card-title">&#9881; Manual Configuration</div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label>API Client ID (from IRS)</label>
+                <input type="text" id="a2a-client-id" placeholder="Your IRS API Client ID">
+              </div>
+              <div class="form-group">
+                <label>User ID (for User JWT)</label>
+                <input type="text" id="a2a-user-id" placeholder="User identifier">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Private Key (PEM)</label>
+              <textarea id="a2a-private-key" rows="8" placeholder="-----BEGIN RSA PRIVATE KEY-----
 ...
 -----END RSA PRIVATE KEY-----"></textarea>
-          </div>
-          <div class="form-group">
-            <label>IRS Token URL (optional, defaults to production)</label>
-            <input type="text" id="a2a-token-url" placeholder="https://api.irs.gov/auth/oauth/v2/token">
-          </div>
-        </div>
-
-        <div class="btn-group" style="margin-bottom: 24px;">
-          <button class="btn btn-primary" onclick="generateClientJWT()">&#128274; Generate Client JWT</button>
-          <button class="btn btn-secondary" onclick="generateUserJWT()">&#128100; Generate User JWT</button>
-        </div>
-
-        <div id="a2a-result" class="hidden">
-          <div class="card">
-            <div class="card-title" id="a2a-result-title">Generated JWT</div>
-            <div class="output-box" id="a2a-jwt-output">
-              <button class="copy-btn" onclick="copyToClipboard('a2a-jwt-output')">Copy</button>
+            </div>
+            <div class="form-group">
+              <label>IRS Token URL (optional, defaults based on environment)</label>
+              <input type="text" id="a2a-token-url" placeholder="https://api.irs.gov/auth/oauth/v2/token">
+            </div>
+            <div class="btn-group" style="margin-top: 12px;">
+              <button class="btn btn-primary" onclick="generateClientJWT()">&#128274; Generate Client JWT</button>
+              <button class="btn btn-secondary" onclick="generateUserJWT()">&#128100; Generate User JWT</button>
             </div>
           </div>
-        </div>
+
+          <div id="a2a-result" class="hidden" style="margin-top: 12px;">
+            <div class="card">
+              <div class="card-title" id="a2a-result-title">Generated JWT</div>
+              <div class="output-box" id="a2a-jwt-output">
+                <button class="copy-btn" onclick="copyToClipboard('a2a-jwt-output')">Copy</button>
+              </div>
+            </div>
+          </div>
+        </details>
 
         <div class="card" style="margin-top: 24px;">
           <div class="card-title">&#128203; A2A OAuth Flow (Pub 5718, Section 3)</div>
@@ -704,13 +723,18 @@ MIIxxxxxx...
       <!-- ── Submissions Page ────────────────────────────────── -->
       <div id="page-submissions" class="page hidden">
         <div class="page-header">
-          <h2>Submissions</h2>
-          <p>Track IRS-accepted submissions and link them to payouts</p>
+          <h2>Submissions &amp; Credits</h2>
+          <p>Record IRS-accepted submissions, process credits, and distribute to third parties</p>
         </div>
 
+        <div class="alert alert-info">
+          Workflow: File 1099 in IRIS &#8594; IRS Accepts &#8594; Record acceptance here &#8594; Process credits &#8594; Distribute to third parties
+        </div>
+
+        <!-- Step 1: Record IRS Acceptance -->
         <div class="card">
-          <div class="card-title">&#128203; Record New Submission</div>
-          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">After IRS accepts your 1099, enter the IDs here to track it and process payouts.</p>
+          <div class="card-title">&#9312; Record IRS-Accepted Submission</div>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">After IRS accepts your 1099 in IRIS, enter the acceptance details below.</p>
           <div class="grid-2">
             <div class="form-group">
               <label>Transaction ID (from IRS)</label>
@@ -722,7 +746,7 @@ MIIxxxxxx...
             </div>
             <div class="form-group">
               <label>Receipt Number</label>
-              <input type="text" id="sub-receipt" placeholder="Receipt number">
+              <input type="text" id="sub-receipt" placeholder="Receipt number from IRS">
             </div>
             <div class="form-group">
               <label>Form Type</label>
@@ -735,25 +759,26 @@ MIIxxxxxx...
               </select>
             </div>
             <div class="form-group">
-              <label>Recipient Name</label>
-              <input type="text" id="sub-recip-name" placeholder="Who was this for">
+              <label>Credit Amount (USD)</label>
+              <input type="text" id="sub-amount" placeholder="0.00">
             </div>
             <div class="form-group">
-              <label>Amount</label>
-              <input type="text" id="sub-amount" placeholder="0.00">
+              <label>Recipient / Entity Name</label>
+              <input type="text" id="sub-recip-name" placeholder="Name associated with this submission">
             </div>
           </div>
           <div class="form-group">
             <label>Notes</label>
             <input type="text" id="sub-notes" placeholder="Optional notes">
           </div>
-          <button class="btn btn-primary" onclick="recordSubmission()">&#128190; Record Submission</button>
+          <button class="btn btn-primary" onclick="recordSubmission()" style="width:100%;padding:14px;">&#128190; Record Submission &amp; Create Credit</button>
         </div>
 
         <div id="sub-result" style="margin-top: 16px;"></div>
 
+        <!-- Submissions Table -->
         <div class="card" style="margin-top: 24px;">
-          <div class="card-title">&#128203; Recorded Submissions</div>
+          <div class="card-title">&#128203; Accepted Submissions &amp; Credits</div>
           <div id="submissions-list" style="font-size:13px;color:var(--text-dim);">Loading...</div>
         </div>
       </div>
@@ -761,19 +786,22 @@ MIIxxxxxx...
       <!-- ── Payouts Page ────────────────────────────────────── -->
       <div id="page-payouts" class="page hidden">
         <div class="page-header">
-          <h2>Payouts</h2>
-          <p>Process payments to third parties via Stripe</p>
+          <h2>Distribute Funds</h2>
+          <p>Send payments to third parties from processed credits</p>
         </div>
 
         <div class="card">
-          <div class="card-title">&#128176; New Payout</div>
+          <div class="card-title">&#128176; New Distribution</div>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Distribute funds to third parties linked to accepted IRS submissions.</p>
           <div class="grid-2">
             <div class="form-group">
-              <label>Submission / Transaction ID</label>
-              <input type="text" id="pay-sub-id" placeholder="Link to a recorded submission">
+              <label>Linked Submission / Transaction ID</label>
+              <select id="pay-sub-id">
+                <option value="">-- Select a submission --</option>
+              </select>
             </div>
             <div class="form-group">
-              <label>Amount (USD)</label>
+              <label>Distribution Amount (USD)</label>
               <input type="text" id="pay-amount" placeholder="0.00">
             </div>
             <div class="form-group">
@@ -782,21 +810,27 @@ MIIxxxxxx...
             </div>
             <div class="form-group">
               <label>Recipient Name</label>
-              <input type="text" id="pay-name" placeholder="Full name">
+              <input type="text" id="pay-name" placeholder="Full name of third party">
             </div>
           </div>
           <div class="form-group">
             <label>Description</label>
             <input type="text" id="pay-desc" placeholder="Payment description">
           </div>
-          <button class="btn btn-primary" onclick="processPayout()">&#128176; Process Payout</button>
+          <button class="btn btn-primary" onclick="processPayout()" style="width:100%;padding:14px;">&#128176; Process Distribution</button>
         </div>
 
         <div id="pay-result" style="margin-top: 16px;"></div>
 
         <div class="card" style="margin-top: 24px;">
-          <div class="card-title">&#128176; Payout History</div>
+          <div class="card-title">&#128176; Distribution History</div>
           <div id="payouts-list" style="font-size:13px;color:var(--text-dim);">Loading...</div>
+        </div>
+
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-title">&#128179; Stripe Account Balance</div>
+          <div id="stripe-balance" style="font-size:13px;color:var(--text-dim);">Click to check balance</div>
+          <button class="btn btn-secondary" onclick="checkBalance()" style="margin-top:12px;">&#128179; Check Balance</button>
         </div>
       </div>
 
@@ -878,23 +912,19 @@ MIIxxxxxx...
             <div class="card-title">&#9881; System Status</div>
             <dl class="cert-info">
               <dt>API Connection</dt>
-              <dd><span class="badge badge-warning">Awaiting Client ID</span></dd>
+              <dd><span class="badge badge-warning" id="dash-api-status">Checking...</span></dd>
               <dt>Certificate</dt>
-              <dd><span class="badge badge-warning">Not loaded</span></dd>
+              <dd><span class="badge badge-warning" id="dash-cert-status">Checking...</span></dd>
               <dt>Stripe</dt>
-              <dd><span class="badge badge-warning">Not configured</span></dd>
+              <dd><span class="badge badge-warning" id="dash-stripe-status">Checking...</span></dd>
             </dl>
           </div>
         </div>
 
-        <div class="card">
+        <div class="card" id="dash-next-steps">
           <div class="card-title">&#128203; Next Steps</div>
-          <ol class="steps-list">
-            <li>Generate your JWK from the JWK Generator page</li>
-            <li>Submit the JWKS to the IRS API Client ID application</li>
-            <li>Obtain your API Client ID from the IRS</li>
-            <li>Configure A2A OAuth with your Client ID and private key</li>
-            <li>Start transmitting information returns via the IRIS API</li>
+          <ol class="steps-list" id="dash-steps-list">
+            <li>Loading...</li>
           </ol>
         </div>
       </div>
@@ -1223,9 +1253,96 @@ MIIxxxxxx...
         if (data.environment) document.getElementById('cfg-environment').value = data.environment;
         if (data.transmitterTIN) document.getElementById('cfg-tin').value = data.transmitterTIN;
         if (data.transmitterName) document.getElementById('cfg-name').value = data.transmitterName;
+
+        if (data.clientId) document.getElementById('a2a-client-id').value = data.clientId;
+
+        const statusEl = document.getElementById('a2a-config-status');
+        if (data.clientId && data.hasPrivateKey) {
+          statusEl.className = 'alert alert-success';
+          statusEl.innerHTML = 'Settings loaded: Client ID <strong>' + data.clientId.substring(0, 8) + '...</strong> | Private Key: Set | Environment: ' + (data.environment || 'test');
+        } else {
+          statusEl.className = 'alert alert-warning';
+          statusEl.innerHTML = 'Missing configuration. Go to <a href="#" onclick="showPage(\'settings\')" style="color:inherit;text-decoration:underline;">Settings</a> to add your Client ID and Private Key first.';
+        }
+
+        updateDashboardStatus(data);
       } catch (_) {}
     }
     loadConfig();
+
+    function updateDashboardStatus(cfg) {
+      const apiEl = document.getElementById('dash-api-status');
+      const certEl = document.getElementById('dash-cert-status');
+      const stripeEl = document.getElementById('dash-stripe-status');
+      const stepsEl = document.getElementById('dash-steps-list');
+
+      if (cfg.clientId) {
+        apiEl.textContent = 'Connected (' + cfg.clientId.substring(0, 8) + '...)';
+        apiEl.className = 'badge badge-success';
+      } else {
+        apiEl.textContent = 'Awaiting Client ID';
+        apiEl.className = 'badge badge-warning';
+      }
+
+      if (cfg.hasPrivateKey) {
+        certEl.textContent = 'Loaded';
+        certEl.className = 'badge badge-success';
+      } else {
+        certEl.textContent = 'Not loaded';
+        certEl.className = 'badge badge-warning';
+      }
+
+      if (cfg.hasStripeKey) {
+        stripeEl.textContent = 'Configured';
+        stripeEl.className = 'badge badge-success';
+      } else {
+        stripeEl.textContent = 'Not configured';
+        stripeEl.className = 'badge badge-warning';
+      }
+
+      var steps = [];
+      if (!cfg.clientId || !cfg.hasPrivateKey) steps.push('Go to Settings and configure your API Client ID and private key');
+      if (!cfg.hasStripeKey) steps.push('Add your Stripe secret key in Settings for payment processing');
+      if (cfg.clientId && cfg.hasPrivateKey) steps.push('Use A2A OAuth to generate access tokens for the IRS API');
+      if (cfg.clientId && cfg.hasPrivateKey) steps.push('Use Transmit 1099 to build and submit information returns');
+      if (cfg.clientId && cfg.hasPrivateKey && cfg.hasStripeKey) steps.push('Process payouts to third parties via the Payouts page');
+      if (steps.length === 0) steps.push('All configured! You are ready to use the platform.');
+      stepsEl.innerHTML = steps.map(function(s) { return '<li>' + s + '</li>'; }).join('');
+    }
+
+    function showPage(pageName) {
+      document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+      document.getElementById('page-' + pageName).classList.remove('hidden');
+      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      document.querySelector('.nav-item[data-page="' + pageName + '"]').classList.add('active');
+    }
+
+    async function quickGetAccessToken() {
+      const userId = document.getElementById('a2a-quick-user-id').value.trim();
+      try {
+        const res = await fetch('/api/a2a/get-access-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: userId || undefined })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        const resultDiv = document.getElementById('a2a-token-result');
+        resultDiv.classList.remove('hidden');
+        document.getElementById('a2a-token-details').innerHTML =
+          '<div style="margin-bottom:16px;"><strong>Environment:</strong> ' + data.environment + '</div>' +
+          '<div style="margin-bottom:16px;"><strong>User ID:</strong> ' + data.userId + '</div>' +
+          '<div style="margin-bottom:16px;"><strong>Token URL:</strong> ' + data.tokenUrl + '</div>' +
+          '<div style="margin-bottom:8px;"><strong>Client JWT:</strong></div>' +
+          '<div class="output-box" style="word-break:break-all;margin-bottom:16px;">' + data.clientJwt + '</div>' +
+          '<div style="margin-bottom:8px;"><strong>User JWT:</strong></div>' +
+          '<div class="output-box" style="word-break:break-all;margin-bottom:16px;">' + data.userJwt + '</div>' +
+          '<div class="alert alert-success" style="margin-top:16px;">Both JWTs generated successfully. These are valid for 5 minutes. Use them to request an access token from the IRS Authorization Server at the Token URL above.</div>';
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
 
     // ── 1099 Transmission ───────────────────────────────────
     function getFormRecord() {
@@ -1353,10 +1470,16 @@ MIIxxxxxx...
         });
         const result = await res.json();
         if (!res.ok) throw new Error(result.error);
-        document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">Submission recorded successfully.</div>';
+        document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">Submission recorded and credit created. Transaction: ' + data.transactionId.substring(0, 16) + '... | Amount: $' + data.amount + '</div>';
+        document.getElementById('sub-tx-id').value = '';
+        document.getElementById('sub-sub-id').value = '';
+        document.getElementById('sub-receipt').value = '';
+        document.getElementById('sub-recip-name').value = '';
+        document.getElementById('sub-amount').value = '';
+        document.getElementById('sub-notes').value = '';
         loadSubmissions();
       } catch (err) {
-        document.getElementById('sub-result').innerHTML = `<div class="alert alert-error">Error: ${err.message}</div>`;
+        document.getElementById('sub-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
       }
     }
 
@@ -1365,41 +1488,57 @@ MIIxxxxxx...
         const res = await fetch('/api/submissions');
         const data = await res.json();
         const el = document.getElementById('submissions-list');
+        const paySelect = document.getElementById('pay-sub-id');
 
         if (!data.submissions || data.submissions.length === 0) {
-          el.innerHTML = '<p>No submissions recorded yet.</p>';
+          el.innerHTML = '<p>No submissions recorded yet. Record an IRS-accepted submission above to create credits.</p>';
+          if (paySelect) paySelect.innerHTML = '<option value="">-- No submissions yet --</option>';
           return;
         }
 
-        let html = '<table style="width:100%;border-collapse:collapse;">';
-        html += '<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:8px;">Transaction ID</th><th style="text-align:left;padding:8px;">Form</th><th style="text-align:left;padding:8px;">Recipient</th><th style="text-align:left;padding:8px;">Amount</th><th style="text-align:left;padding:8px;">Payout</th><th style="text-align:left;padding:8px;">Date</th></tr>';
+        var totalCredits = 0;
+        var html = '<table style="width:100%;border-collapse:collapse;">';
+        html += '<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:8px;">Transaction ID</th><th style="text-align:left;padding:8px;">Form</th><th style="text-align:left;padding:8px;">Entity</th><th style="text-align:left;padding:8px;">Credit</th><th style="text-align:left;padding:8px;">Status</th><th style="text-align:left;padding:8px;">Date</th></tr>';
 
-        for (const s of data.submissions.reverse()) {
-          const payoutBadge = s.payoutStatus === 'pending'
-            ? '<span class="badge badge-warning">Pending</span>'
-            : s.payoutStatus === 'initiated'
-            ? '<span class="badge badge-success">Initiated</span>'
-            : '<span class="badge badge-success">Done</span>';
-          html += `<tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:8px;font-family:monospace;">${(s.transactionId || '').substring(0, 16)}...</td>
-            <td style="padding:8px;">${s.formType}</td>
-            <td style="padding:8px;">${s.recipientName}</td>
-            <td style="padding:8px;">$${s.amount}</td>
-            <td style="padding:8px;">${payoutBadge}</td>
-            <td style="padding:8px;">${new Date(s.createdAt).toLocaleDateString()}</td>
-          </tr>`;
+        var subs = data.submissions.slice().reverse();
+        for (var i = 0; i < subs.length; i++) {
+          var s = subs[i];
+          totalCredits += parseFloat(s.amount) || 0;
+          var statusBadge = s.payoutStatus === 'distributed'
+            ? '<span class="badge badge-success">Distributed</span>'
+            : s.payoutStatus === 'partial'
+            ? '<span class="badge badge-warning">Partial</span>'
+            : '<span class="badge badge-info" style="background:#2563eb;color:#fff;">Credit Ready</span>';
+          html += '<tr style="border-bottom:1px solid var(--border);">';
+          html += '<td style="padding:8px;font-family:monospace;">' + (s.transactionId || '').substring(0, 16) + '...</td>';
+          html += '<td style="padding:8px;">' + s.formType + '</td>';
+          html += '<td style="padding:8px;">' + (s.recipientName || '') + '</td>';
+          html += '<td style="padding:8px;color:#22c55e;font-weight:600;">$' + (s.amount || '0') + '</td>';
+          html += '<td style="padding:8px;">' + statusBadge + '</td>';
+          html += '<td style="padding:8px;">' + new Date(s.createdAt).toLocaleDateString() + '</td>';
+          html += '</tr>';
         }
         html += '</table>';
+        html += '<div style="margin-top:12px;padding:12px;background:var(--surface2);border-radius:8px;"><strong>Total Credits:</strong> <span style="color:#22c55e;font-size:18px;font-weight:700;">$' + totalCredits.toFixed(2) + '</span></div>';
         el.innerHTML = html;
-      } catch (_) {
+
+        if (paySelect) {
+          paySelect.innerHTML = '<option value="">-- Select a submission --</option>';
+          for (var j = 0; j < subs.length; j++) {
+            var sub = subs[j];
+            paySelect.innerHTML += '<option value="' + sub.transactionId + '">' + sub.formType + ' - $' + sub.amount + ' - ' + (sub.recipientName || sub.transactionId.substring(0, 12)) + '</option>';
+          }
+        }
+      } catch (e) {
         document.getElementById('submissions-list').innerHTML = '<p>Failed to load submissions.</p>';
       }
     }
 
-    // ── Payouts ───────────────────────────────────────────────
+    // ── Distributions ───────────────────────────────────────────────
     async function processPayout() {
-      const data = {
-        submissionId: document.getElementById('pay-sub-id').value.trim(),
+      var subId = document.getElementById('pay-sub-id').value;
+      var data = {
+        submissionId: subId,
         amount: document.getElementById('pay-amount').value.trim(),
         recipientEmail: document.getElementById('pay-email').value.trim(),
         recipientName: document.getElementById('pay-name').value.trim(),
@@ -1412,47 +1551,67 @@ MIIxxxxxx...
       }
 
       try {
-        const res = await fetch('/api/stripe/payout', {
+        var res = await fetch('/api/stripe/payout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
         });
-        const result = await res.json();
+        var result = await res.json();
         if (!res.ok) throw new Error(result.error);
-        document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">Payout processed successfully. Stripe ID: ' + result.stripePaymentIntent.id + '</div>';
+        document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">Distribution processed. Stripe ID: ' + (result.stripePaymentIntent ? result.stripePaymentIntent.id : 'N/A') + '</div>';
+        document.getElementById('pay-amount').value = '';
+        document.getElementById('pay-email').value = '';
+        document.getElementById('pay-name').value = '';
+        document.getElementById('pay-desc').value = '';
         loadPayouts();
       } catch (err) {
-        document.getElementById('pay-result').innerHTML = `<div class="alert alert-error">Error: ${err.message}</div>`;
+        document.getElementById('pay-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
       }
     }
 
     async function loadPayouts() {
       try {
-        const res = await fetch('/api/payouts');
-        const data = await res.json();
-        const el = document.getElementById('payouts-list');
+        var res = await fetch('/api/payouts');
+        var data = await res.json();
+        var el = document.getElementById('payouts-list');
 
         if (!data.payouts || data.payouts.length === 0) {
-          el.innerHTML = '<p>No payouts recorded yet.</p>';
+          el.innerHTML = '<p>No distributions yet. Record submissions first, then distribute funds from here.</p>';
           return;
         }
 
-        let html = '<table style="width:100%;border-collapse:collapse;">';
+        var html = '<table style="width:100%;border-collapse:collapse;">';
         html += '<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:8px;">Stripe ID</th><th style="text-align:left;padding:8px;">Recipient</th><th style="text-align:left;padding:8px;">Amount</th><th style="text-align:left;padding:8px;">Status</th><th style="text-align:left;padding:8px;">Date</th></tr>';
 
-        for (const p of data.payouts.reverse()) {
-          html += `<tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:8px;font-family:monospace;">${(p.stripeId || '').substring(0, 20)}...</td>
-            <td style="padding:8px;">${p.recipientName || p.recipientEmail || ''}</td>
-            <td style="padding:8px;">$${p.amount}</td>
-            <td style="padding:8px;"><span class="badge badge-success">${p.status}</span></td>
-            <td style="padding:8px;">${new Date(p.createdAt).toLocaleDateString()}</td>
-          </tr>`;
+        var payouts = data.payouts.slice().reverse();
+        for (var i = 0; i < payouts.length; i++) {
+          var p = payouts[i];
+          html += '<tr style="border-bottom:1px solid var(--border);">';
+          html += '<td style="padding:8px;font-family:monospace;">' + (p.stripeId || '').substring(0, 20) + '...</td>';
+          html += '<td style="padding:8px;">' + (p.recipientName || p.recipientEmail || '') + '</td>';
+          html += '<td style="padding:8px;">$' + p.amount + '</td>';
+          html += '<td style="padding:8px;"><span class="badge badge-success">' + p.status + '</span></td>';
+          html += '<td style="padding:8px;">' + new Date(p.createdAt).toLocaleDateString() + '</td>';
+          html += '</tr>';
         }
         html += '</table>';
         el.innerHTML = html;
-      } catch (_) {
-        document.getElementById('payouts-list').innerHTML = '<p>Failed to load payouts.</p>';
+      } catch (e) {
+        document.getElementById('payouts-list').innerHTML = '<p>Failed to load distributions.</p>';
+      }
+    }
+
+    async function checkBalance() {
+      try {
+        var res = await fetch('/api/stripe/balance');
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        var bal = data.balance;
+        var available = bal.available ? bal.available.map(function(a) { return '$' + (a.amount / 100).toFixed(2) + ' ' + a.currency.toUpperCase(); }).join(', ') : '$0.00';
+        var pending = bal.pending ? bal.pending.map(function(p) { return '$' + (p.amount / 100).toFixed(2) + ' ' + p.currency.toUpperCase(); }).join(', ') : '$0.00';
+        document.getElementById('stripe-balance').innerHTML = '<div style="margin:8px 0;"><strong>Available:</strong> <span style="color:#22c55e;font-size:16px;">' + available + '</span></div><div><strong>Pending:</strong> <span style="color:#eab308;">' + pending + '</span></div>';
+      } catch (err) {
+        document.getElementById('stripe-balance').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
       }
     }
 
@@ -1460,7 +1619,7 @@ MIIxxxxxx...
     document.querySelectorAll('.nav-item').forEach(item => {
       item.addEventListener('click', () => {
         if (item.dataset.page === 'submissions') loadSubmissions();
-        if (item.dataset.page === 'payouts') loadPayouts();
+        if (item.dataset.page === 'payouts') { loadPayouts(); loadSubmissions(); }
       });
     });
 
