@@ -10,7 +10,10 @@ const cors = require('cors');
 const app = express();
 const upload = multer({ dest: 'uploads/', limits: { fileSize: 5 * 1024 * 1024 } });
 
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 app.use(express.json());
 
 // ── JWK Generation ──────────────────────────────────────────────────────────
