@@ -378,13 +378,15 @@ api.post('/config/save', (req, res) => {
 });
 
 api.get('/config', (req, res) => {
+  const swiftCfg = appConfig.swiftConfig || {};
   res.json({
     clientId: appConfig.clientId,
     hasPrivateKey: !!appConfig.privateKeyPem,
     environment: appConfig.environment,
     transmitterTIN: appConfig.transmitterTIN,
     transmitterName: appConfig.transmitterName,
-    hasStripeKey: !!appConfig.stripeSecretKey
+    hasStripeKey: !!appConfig.stripeSecretKey,
+    hasSwiftConfig: !!(swiftCfg.swiftBIC && swiftCfg.bankName && swiftCfg.accountNumber)
   });
 });
 
@@ -639,6 +641,129 @@ api.get('/stripe/balance', async (req, res) => {
 
 api.get('/payouts', (req, res) => {
   res.json({ payouts: db.getPayouts() });
+});
+
+// ── SWIFT Settlement Routes ────────────────────────────────────────────────
+
+api.post('/swift/config', (req, res) => {
+  const { swiftBIC, bankName, accountNumber, accountName, iban, correspondentBIC, correspondentBank, messageType } = req.body;
+  if (!swiftBIC || !bankName || !accountNumber) {
+    return res.status(400).json({ error: 'SWIFT BIC, Bank Name, and Account Number are required' });
+  }
+  appConfig.swiftConfig = {
+    swiftBIC, bankName, accountNumber, accountName: accountName || '',
+    iban: iban || '', correspondentBIC: correspondentBIC || '',
+    correspondentBank: correspondentBank || '', messageType: messageType || 'MT103'
+  };
+  saveConfig();
+  res.json({ success: true, message: 'SWIFT bank configuration saved' });
+});
+
+api.get('/swift/config', (req, res) => {
+  const cfg = appConfig.swiftConfig || {};
+  res.json({
+    configured: !!(cfg.swiftBIC && cfg.bankName && cfg.accountNumber),
+    swiftBIC: cfg.swiftBIC || '',
+    bankName: cfg.bankName || '',
+    accountNumber: cfg.accountNumber ? '****' + cfg.accountNumber.slice(-4) : '',
+    accountName: cfg.accountName || '',
+    iban: cfg.iban ? '****' + cfg.iban.slice(-4) : '',
+    messageType: cfg.messageType || 'MT103'
+  });
+});
+
+api.post('/swift/settle', (req, res) => {
+  try {
+    const { submissionId, transactionId, amount, beneficiaryName, beneficiaryAccount, beneficiaryBIC, beneficiaryBank, currency, reference } = req.body;
+    if (!transactionId || !amount || !beneficiaryName || !beneficiaryAccount || !beneficiaryBIC) {
+      return res.status(400).json({ error: 'Transaction ID, amount, beneficiary name, account, and BIC are required' });
+    }
+
+    const swiftCfg = appConfig.swiftConfig;
+    if (!swiftCfg || !swiftCfg.swiftBIC) {
+      return res.status(400).json({ error: 'SWIFT bank not configured. Go to Settlement page and configure your bank details first.' });
+    }
+
+    const utiPrefix = 'USIRS';
+    const txIdClean = transactionId.replace(/[^A-Za-z0-9]/g, '').substring(0, 20);
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const uti = utiPrefix + txIdClean + timestamp;
+
+    const messageType = swiftCfg.messageType || 'MT103';
+    const settlementRef = 'SETL-' + crypto.randomBytes(8).toString('hex').toUpperCase();
+
+    const swiftMessage = {
+      messageType,
+      senderBIC: swiftCfg.swiftBIC,
+      receiverBIC: beneficiaryBIC,
+      transactionRef: settlementRef,
+      uti: uti,
+      valueDate: new Date().toISOString().split('T')[0].replace(/-/g, ''),
+      currency: currency || 'USD',
+      amount: parseFloat(amount).toFixed(2),
+      orderingCustomer: {
+        account: swiftCfg.accountNumber,
+        name: swiftCfg.accountName || swiftCfg.bankName,
+        bic: swiftCfg.swiftBIC
+      },
+      beneficiary: {
+        account: beneficiaryAccount,
+        name: beneficiaryName,
+        bic: beneficiaryBIC,
+        bank: beneficiaryBank || ''
+      },
+      remittanceInfo: 'IRS IRIS Transmission UTI: ' + uti,
+      irsTransactionId: transactionId
+    };
+
+    const settlement = db.addSettlement({
+      id: settlementRef,
+      submissionId: submissionId || '',
+      transactionId,
+      uti,
+      messageType,
+      senderBIC: swiftCfg.swiftBIC,
+      receiverBIC: beneficiaryBIC,
+      amount: parseFloat(amount).toFixed(2),
+      currency: currency || 'USD',
+      beneficiaryName,
+      beneficiaryAccount: '****' + beneficiaryAccount.slice(-4),
+      status: 'initiated',
+      swiftMessage
+    });
+
+    if (submissionId) {
+      db.updateSubmission(submissionId, { settlementStatus: 'initiated', settlementId: settlementRef, uti });
+    }
+
+    res.json({
+      success: true,
+      settlement,
+      uti,
+      settlementRef,
+      swiftMessage,
+      instructions: [
+        'Settlement initiated with UTI: ' + uti,
+        'SWIFT ' + messageType + ' message generated',
+        'Submit this message through your SWIFT-connected bank portal',
+        'The UTI links this settlement back to IRS Transaction: ' + transactionId.substring(0, 16) + '...'
+      ]
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+api.get('/swift/settlements', (req, res) => {
+  res.json({ settlements: db.getSettlements() });
+});
+
+api.post('/swift/settlements/:id/status', (req, res) => {
+  const { status } = req.body;
+  if (!status) return res.status(400).json({ error: 'status is required' });
+  const updated = db.updateSettlement(req.params.id, { status });
+  if (!updated) return res.status(404).json({ error: 'Settlement not found' });
+  res.json({ success: true, settlement: updated });
 });
 
 app.use('/api', api);
