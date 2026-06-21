@@ -721,7 +721,7 @@ MIIxxxxxx...
       <div id="page-submissions" class="page hidden">
         <div class="page-header">
           <h2>Process &amp; Pay</h2>
-          <p>Record IRS acceptances, collect payments, and distribute funds - all through Stripe</p>
+          <p>Record IRS acceptances, collect payments, and distribute funds via PayPal or Stripe</p>
         </div>
 
         <div class="alert alert-success" style="font-size:14px;">
@@ -777,14 +777,14 @@ MIIxxxxxx...
         <!-- Step 2: Submissions Table with Actions -->
         <div class="card" style="margin-top: 24px;">
           <div class="card-title">&#9313; Your Credits - Collect &amp; Distribute</div>
-          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Click "Collect" to create a Stripe payment link, or "Distribute" to send funds to a third party.</p>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Click "Collect" to create a payment link, or "Distribute" to send funds to a third party via PayPal or Stripe.</p>
           <div id="submissions-list" style="font-size:13px;color:var(--text-dim);">Loading...</div>
         </div>
 
         <!-- Quick Distribute Form -->
         <div class="card" style="margin-top: 24px;" id="distribute-section">
-          <div class="card-title">&#9314; Distribute Funds via Stripe</div>
-          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Send payment to a third party from a recorded credit.</p>
+          <div class="card-title">&#9314; Distribute Funds</div>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Send payment to a third party from a recorded credit. PayPal sends directly to their email - they get the money right away.</p>
           <div class="grid-2">
             <div class="form-group">
               <label>Linked Submission</label>
@@ -812,8 +812,8 @@ MIIxxxxxx...
           <div class="form-group">
             <label>Payment Method</label>
             <select id="pay-method">
+              <option value="paypal">PayPal (Recommended - sends directly to email)</option>
               <option value="stripe">Stripe (Card / ACH Bank Transfer)</option>
-              <option value="paypal">PayPal</option>
             </select>
           </div>
           <button class="btn btn-primary" onclick="processDistribution()" style="width:100%;padding:14px;">&#128176; Send Payment</button>
@@ -828,9 +828,10 @@ MIIxxxxxx...
 
         <!-- Balance -->
         <div class="card" style="margin-top: 24px;">
-          <div class="card-title">&#128179; Stripe Account Balance</div>
-          <div id="stripe-balance" style="font-size:13px;color:var(--text-dim);">Click to check balance</div>
-          <button class="btn btn-secondary" onclick="checkBalance()" style="margin-top:12px;">&#128179; Check Balance</button>
+          <div class="card-title">&#128179; Account Balances</div>
+          <div id="stripe-balance" style="font-size:13px;color:var(--text-dim);">Click to check balances</div>
+          <button class="btn btn-secondary" onclick="checkBalance()" style="margin-top:12px;">&#128179; Check Stripe Balance</button>
+          <p style="color:var(--text-dim);font-size:12px;margin-top:8px;">PayPal balance: check at paypal.com. PayPal payouts send directly from your PayPal balance.</p>
         </div>
       </div>
 
@@ -1634,10 +1635,10 @@ MIIxxxxxx...
 
           var actions = '';
           if (s.payoutStatus !== 'distributed') {
-            actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="collectPayment(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')" title="Stripe (Card + ACH Bank Transfer)">Collect (Stripe)</button>';
             if (window._ppConfigured) {
               actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;background:#0070ba;color:#fff;border:none;" onclick="collectPayPal(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')" title="PayPal Checkout">Collect (PayPal)</button>';
             }
+            actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="collectPayment(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')" title="Stripe (Card + ACH Bank Transfer)">Collect (Stripe)</button>';
             actions += '<button class="btn btn-primary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="prefillDistribute(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')">Distribute</button>';
           }
           if (s.checkoutUrl) {
