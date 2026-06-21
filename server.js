@@ -386,7 +386,11 @@ api.get('/config', (req, res) => {
     transmitterTIN: appConfig.transmitterTIN,
     transmitterName: appConfig.transmitterName,
     hasStripeKey: !!appConfig.stripeSecretKey,
-    hasSwiftConfig: !!(swiftCfg.swiftBIC && swiftCfg.bankName && swiftCfg.accountNumber)
+    hasSwiftConfig: !!(swiftCfg.swiftBIC && swiftCfg.bankName && swiftCfg.accountNumber),
+    hasQuickBooks: !!(appConfig.qbAccessToken && appConfig.qbRealmId),
+    qbConfigured: !!(appConfig.qbClientId && appConfig.qbClientSecret),
+    hasPayPal: !!(appConfig.ppClientId && appConfig.ppClientSecret),
+    ppEnvironment: appConfig.ppEnvironment || 'sandbox'
   });
 });
 
@@ -658,7 +662,7 @@ api.post('/stripe/checkout', async (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
 
     const session = await stripe.stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      payment_method_types: ['card', 'us_bank_account'],
       mode: 'payment',
       line_items: [{
         price_data: {
@@ -725,6 +729,346 @@ api.post('/stripe/send-payout', async (req, res) => {
     res.json({ success: true, payout, stripePaymentIntent: paymentIntent });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// ── QuickBooks Integration ─────────────────────────────────────────────────
+
+const axios = require('axios');
+
+const QB_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2';
+const QB_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
+const QB_API_BASE = 'https://quickbooks.api.intuit.com/v3/company';
+const QB_SANDBOX_API = 'https://sandbox-quickbooks.api.intuit.com/v3/company';
+
+function getQBApiBase() {
+  return (appConfig.qbEnvironment === 'production') ? QB_API_BASE : QB_SANDBOX_API;
+}
+
+async function refreshQBToken() {
+  if (!appConfig.qbRefreshToken || !appConfig.qbClientId || !appConfig.qbClientSecret) return null;
+  try {
+    const res = await axios.post(QB_TOKEN_URL, new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: appConfig.qbRefreshToken
+    }).toString(), {
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(appConfig.qbClientId + ':' + appConfig.qbClientSecret).toString('base64'),
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+    appConfig.qbAccessToken = res.data.access_token;
+    appConfig.qbRefreshToken = res.data.refresh_token;
+    appConfig.qbTokenExpiry = Date.now() + (res.data.expires_in * 1000);
+    saveConfig();
+    return appConfig.qbAccessToken;
+  } catch (err) {
+    console.error('QB token refresh failed:', err.message);
+    return null;
+  }
+}
+
+async function getQBToken() {
+  if (appConfig.qbAccessToken && appConfig.qbTokenExpiry && Date.now() < appConfig.qbTokenExpiry - 60000) {
+    return appConfig.qbAccessToken;
+  }
+  return refreshQBToken();
+}
+
+api.post('/quickbooks/config', (req, res) => {
+  const { qbClientId, qbClientSecret, qbEnvironment } = req.body;
+  if (!qbClientId || !qbClientSecret) {
+    return res.status(400).json({ error: 'QuickBooks Client ID and Client Secret are required' });
+  }
+  appConfig.qbClientId = qbClientId;
+  appConfig.qbClientSecret = qbClientSecret;
+  appConfig.qbEnvironment = qbEnvironment || 'sandbox';
+  saveConfig();
+  res.json({ success: true, message: 'QuickBooks credentials saved. Now connect your QuickBooks account.' });
+});
+
+api.get('/quickbooks/connect', (req, res) => {
+  if (!appConfig.qbClientId) {
+    return res.status(400).json({ error: 'QuickBooks Client ID not configured. Save your credentials first.' });
+  }
+  const redirectUri = `${req.protocol}://${req.get('host')}/api/quickbooks/callback`;
+  const scope = 'com.intuit.quickbooks.accounting';
+  const state = crypto.randomBytes(16).toString('hex');
+  appConfig.qbOAuthState = state;
+  saveConfig();
+
+  const authUrl = `${QB_AUTH_URL}?client_id=${encodeURIComponent(appConfig.qbClientId)}&response_type=code&scope=${encodeURIComponent(scope)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+  res.json({ success: true, authUrl });
+});
+
+api.get('/quickbooks/callback', async (req, res) => {
+  try {
+    const { code, state, realmId } = req.query;
+    if (state !== appConfig.qbOAuthState) {
+      return res.status(400).send('Invalid OAuth state. Please try connecting again.');
+    }
+
+    const redirectUri = `${req.protocol}://${req.get('host')}/api/quickbooks/callback`;
+    const tokenRes = await axios.post(QB_TOKEN_URL, new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri
+    }).toString(), {
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(appConfig.qbClientId + ':' + appConfig.qbClientSecret).toString('base64'),
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    appConfig.qbAccessToken = tokenRes.data.access_token;
+    appConfig.qbRefreshToken = tokenRes.data.refresh_token;
+    appConfig.qbTokenExpiry = Date.now() + (tokenRes.data.expires_in * 1000);
+    appConfig.qbRealmId = realmId;
+    saveConfig();
+
+    res.send('<html><body style="background:#0f1117;color:#e4e7ef;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;"><div style="text-align:center;"><h1 style="color:#34d399;">QuickBooks Connected!</h1><p>You can close this window and return to the app.</p><script>setTimeout(function(){window.close();},3000);</script></div></body></html>');
+  } catch (err) {
+    res.status(500).send('QuickBooks connection failed: ' + err.message);
+  }
+});
+
+api.get('/quickbooks/status', (req, res) => {
+  res.json({
+    configured: !!(appConfig.qbClientId && appConfig.qbClientSecret),
+    connected: !!(appConfig.qbAccessToken && appConfig.qbRealmId),
+    realmId: appConfig.qbRealmId || null,
+    environment: appConfig.qbEnvironment || 'sandbox'
+  });
+});
+
+api.post('/quickbooks/create-credit', async (req, res) => {
+  try {
+    const token = await getQBToken();
+    if (!token) {
+      return res.status(401).json({ error: 'QuickBooks not connected or token expired. Please reconnect.' });
+    }
+
+    const { amount, recipientName, transactionId, formType, notes } = req.body;
+    if (!amount) return res.status(400).json({ error: 'Amount is required' });
+
+    const journalEntry = {
+      Line: [
+        {
+          Amount: parseFloat(amount),
+          DetailType: 'JournalEntryLineDetail',
+          JournalEntryLineDetail: {
+            PostingType: 'Debit',
+            AccountRef: { name: 'Accounts Receivable (A/R)' }
+          },
+          Description: `IRS IRIS Credit - ${formType || '1099'} - ${transactionId || 'N/A'}`
+        },
+        {
+          Amount: parseFloat(amount),
+          DetailType: 'JournalEntryLineDetail',
+          JournalEntryLineDetail: {
+            PostingType: 'Credit',
+            AccountRef: { name: 'Other Income' }
+          },
+          Description: `IRS IRIS Credit - ${recipientName || ''} - ${transactionId || 'N/A'}`
+        }
+      ],
+      PrivateNote: `IRS Transaction: ${transactionId || 'N/A'} | Form: ${formType || 'N/A'} | ${notes || ''}`
+    };
+
+    const qbRes = await axios.post(
+      `${getQBApiBase()}/${appConfig.qbRealmId}/journalentry?minorversion=65`,
+      journalEntry,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      }
+    );
+
+    res.json({
+      success: true,
+      journalEntryId: qbRes.data.JournalEntry.Id,
+      message: `Credit of $${amount} recorded in QuickBooks as Journal Entry #${qbRes.data.JournalEntry.Id}`
+    });
+  } catch (err) {
+    const detail = err.response ? err.response.data : err.message;
+    res.status(400).json({ error: 'QuickBooks credit creation failed', detail });
+  }
+});
+
+api.post('/quickbooks/disconnect', (req, res) => {
+  delete appConfig.qbAccessToken;
+  delete appConfig.qbRefreshToken;
+  delete appConfig.qbTokenExpiry;
+  delete appConfig.qbRealmId;
+  delete appConfig.qbOAuthState;
+  saveConfig();
+  res.json({ success: true, message: 'QuickBooks disconnected' });
+});
+
+// ── PayPal Integration ────────────────────────────────────────────────────
+
+const PP_LIVE_URL = 'https://api-m.paypal.com';
+const PP_SANDBOX_URL = 'https://api-m.sandbox.paypal.com';
+
+function getPPBase() {
+  return (appConfig.ppEnvironment === 'production') ? PP_LIVE_URL : PP_SANDBOX_URL;
+}
+
+async function getPPToken() {
+  if (!appConfig.ppClientId || !appConfig.ppClientSecret) return null;
+  if (appConfig.ppAccessToken && appConfig.ppTokenExpiry && Date.now() < appConfig.ppTokenExpiry - 30000) {
+    return appConfig.ppAccessToken;
+  }
+  try {
+    const res = await axios.post(`${getPPBase()}/v1/oauth2/token`, 'grant_type=client_credentials', {
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(appConfig.ppClientId + ':' + appConfig.ppClientSecret).toString('base64'),
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+    appConfig.ppAccessToken = res.data.access_token;
+    appConfig.ppTokenExpiry = Date.now() + (res.data.expires_in * 1000);
+    return appConfig.ppAccessToken;
+  } catch (err) {
+    console.error('PayPal token failed:', err.message);
+    return null;
+  }
+}
+
+api.post('/paypal/config', (req, res) => {
+  const { ppClientId, ppClientSecret, ppEnvironment } = req.body;
+  if (!ppClientId || !ppClientSecret) {
+    return res.status(400).json({ error: 'PayPal Client ID and Secret are required' });
+  }
+  appConfig.ppClientId = ppClientId;
+  appConfig.ppClientSecret = ppClientSecret;
+  appConfig.ppEnvironment = ppEnvironment || 'sandbox';
+  saveConfig();
+  res.json({ success: true, message: 'PayPal configured' });
+});
+
+api.get('/paypal/status', (req, res) => {
+  res.json({
+    configured: !!(appConfig.ppClientId && appConfig.ppClientSecret),
+    environment: appConfig.ppEnvironment || 'sandbox'
+  });
+});
+
+api.post('/paypal/create-order', async (req, res) => {
+  try {
+    const token = await getPPToken();
+    if (!token) return res.status(400).json({ error: 'PayPal not configured or credentials invalid' });
+
+    const { submissionId, amount, recipientName, description } = req.body;
+    if (!amount) return res.status(400).json({ error: 'Amount is required' });
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const orderRes = await axios.post(`${getPPBase()}/v2/checkout/orders`, {
+      intent: 'CAPTURE',
+      purchase_units: [{
+        amount: { currency_code: 'USD', value: parseFloat(amount).toFixed(2) },
+        description: description || `IRS 1099 Credit - ${recipientName || 'Payment'}`,
+        custom_id: submissionId || ''
+      }],
+      application_context: {
+        return_url: `${baseUrl}?paypal=success`,
+        cancel_url: `${baseUrl}?paypal=cancelled`,
+        brand_name: 'IRS IRIS Platform',
+        user_action: 'PAY_NOW'
+      }
+    }, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+    });
+
+    const approveLink = orderRes.data.links.find(l => l.rel === 'approve');
+
+    if (submissionId) {
+      db.updateSubmission(submissionId, { ppOrderId: orderRes.data.id, ppStatus: 'created' });
+    }
+
+    res.json({
+      success: true,
+      orderId: orderRes.data.id,
+      approveUrl: approveLink ? approveLink.href : null
+    });
+  } catch (err) {
+    const detail = err.response ? err.response.data : err.message;
+    res.status(400).json({ error: 'PayPal order creation failed', detail });
+  }
+});
+
+api.post('/paypal/capture-order', async (req, res) => {
+  try {
+    const token = await getPPToken();
+    if (!token) return res.status(400).json({ error: 'PayPal not configured' });
+
+    const { orderId, submissionId } = req.body;
+    if (!orderId) return res.status(400).json({ error: 'Order ID is required' });
+
+    const captureRes = await axios.post(`${getPPBase()}/v2/checkout/orders/${orderId}/capture`, {}, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+    });
+
+    if (submissionId) {
+      db.updateSubmission(submissionId, { ppStatus: 'captured', collectStatus: 'collected' });
+    }
+
+    res.json({ success: true, capture: captureRes.data });
+  } catch (err) {
+    const detail = err.response ? err.response.data : err.message;
+    res.status(400).json({ error: 'PayPal capture failed', detail });
+  }
+});
+
+api.post('/paypal/send-payout', async (req, res) => {
+  try {
+    const token = await getPPToken();
+    if (!token) return res.status(400).json({ error: 'PayPal not configured' });
+
+    const { submissionId, amount, recipientEmail, recipientName, description } = req.body;
+    if (!amount || !recipientEmail) {
+      return res.status(400).json({ error: 'Amount and recipient email are required' });
+    }
+
+    const payoutRes = await axios.post(`${getPPBase()}/v1/payments/payouts`, {
+      sender_batch_header: {
+        sender_batch_id: 'IRS-' + crypto.randomBytes(8).toString('hex'),
+        email_subject: description || 'You have received a payment',
+        email_message: `Payment of $${amount} for IRS 1099 submission`
+      },
+      items: [{
+        recipient_type: 'EMAIL',
+        amount: { value: parseFloat(amount).toFixed(2), currency: 'USD' },
+        receiver: recipientEmail,
+        note: `IRS Credit Distribution - ${recipientName || ''} - ${submissionId || ''}`,
+        sender_item_id: submissionId || crypto.randomBytes(4).toString('hex')
+      }]
+    }, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+    });
+
+    const payout = db.addPayout({
+      id: payoutRes.data.batch_header.payout_batch_id,
+      submissionId: submissionId || '',
+      recipientEmail,
+      recipientName: recipientName || '',
+      amount: parseFloat(amount),
+      status: payoutRes.data.batch_header.batch_status,
+      paypalBatchId: payoutRes.data.batch_header.payout_batch_id,
+      type: 'paypal'
+    });
+
+    if (submissionId) {
+      db.updateSubmission(submissionId, { payoutStatus: 'distributed', payoutId: payoutRes.data.batch_header.payout_batch_id });
+    }
+
+    res.json({ success: true, payout, paypalBatch: payoutRes.data.batch_header });
+  } catch (err) {
+    const detail = err.response ? err.response.data : err.message;
+    res.status(400).json({ error: 'PayPal payout failed', detail });
   }
 });
 

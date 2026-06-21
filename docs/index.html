@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IRS IRIS - A2A Integration Platform</title>
+  <script src="api-config.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -320,7 +321,6 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
-  <script src="api-config.js"></script>
 </head>
 <body>
   <div class="app">
@@ -726,8 +726,9 @@ MIIxxxxxx...
         </div>
 
         <div class="alert alert-success" style="font-size:14px;">
-          <strong>Simple 3-step flow:</strong> Record IRS acceptance &#8594; Collect payment via Stripe &#8594; Distribute to third parties via Stripe
+          <strong>Simple 3-step flow:</strong> Record IRS acceptance &#8594; Collect payment (Stripe/ACH/PayPal) &#8594; Distribute to third parties
         </div>
+        <div id="qb-auto-status" class="hidden" style="margin-bottom:16px;"></div>
 
         <!-- Step 1: Record IRS Acceptance -->
         <div class="card">
@@ -769,7 +770,7 @@ MIIxxxxxx...
             <label>Notes</label>
             <input type="text" id="sub-notes" placeholder="Optional notes">
           </div>
-          <button class="btn btn-primary" onclick="recordSubmission()" style="width:100%;padding:14px;">&#128190; Record Submission &amp; Create Credit</button>
+          <button class="btn btn-primary" onclick="recordSubmission()" style="width:100%;padding:14px;">&#128190; Record Submission &amp; Create Credit (+ QuickBooks if connected)</button>
         </div>
 
         <div id="sub-result" style="margin-top: 16px;"></div>
@@ -809,7 +810,14 @@ MIIxxxxxx...
             <label>Description</label>
             <input type="text" id="pay-desc" placeholder="Payment description">
           </div>
-          <button class="btn btn-primary" onclick="processDistribution()" style="width:100%;padding:14px;">&#128176; Send Payment via Stripe</button>
+          <div class="form-group">
+            <label>Payment Method</label>
+            <select id="pay-method">
+              <option value="stripe">Stripe (Card / ACH Bank Transfer)</option>
+              <option value="paypal">PayPal</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="processDistribution()" style="width:100%;padding:14px;">&#128176; Send Payment</button>
           <div id="pay-result" style="margin-top: 12px;"></div>
         </div>
 
@@ -861,6 +869,58 @@ MIIxxxxxx...
             <label>Stripe Secret Key</label>
             <input type="password" id="cfg-stripe-key" placeholder="sk_live_... or sk_test_...">
           </div>
+          <p style="color:var(--text-dim);font-size:12px;margin-top:8px;">Stripe supports card payments + ACH bank transfers (processed through Federal Reserve).</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#128218; QuickBooks Integration</div>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Connect QuickBooks to automatically record IRS credits as journal entries. Get your credentials from <a href="https://developer.intuit.com" target="_blank" style="color:var(--accent);">developer.intuit.com</a></p>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>QuickBooks Client ID</label>
+              <input type="text" id="cfg-qb-client-id" placeholder="From Intuit Developer portal">
+            </div>
+            <div class="form-group">
+              <label>QuickBooks Client Secret</label>
+              <input type="password" id="cfg-qb-secret" placeholder="From Intuit Developer portal">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>QuickBooks Environment</label>
+            <select id="cfg-qb-env">
+              <option value="sandbox">Sandbox (Testing)</option>
+              <option value="production">Production (Live)</option>
+            </select>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-secondary" onclick="saveQBConfig()">Save QB Credentials</button>
+            <button class="btn btn-primary" onclick="connectQuickBooks()" id="btn-qb-connect">Connect QuickBooks</button>
+          </div>
+          <div id="qb-status" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#128179; PayPal Configuration</div>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Add PayPal as an alternative payment method. Get your credentials from <a href="https://developer.paypal.com" target="_blank" style="color:var(--accent);">developer.paypal.com</a></p>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>PayPal Client ID</label>
+              <input type="text" id="cfg-pp-client-id" placeholder="From PayPal Developer portal">
+            </div>
+            <div class="form-group">
+              <label>PayPal Secret</label>
+              <input type="password" id="cfg-pp-secret" placeholder="From PayPal Developer portal">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>PayPal Environment</label>
+            <select id="cfg-pp-env">
+              <option value="sandbox">Sandbox (Testing)</option>
+              <option value="production">Production (Live)</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary" onclick="savePayPalConfig()">Save PayPal Credentials</button>
+          <div id="pp-status" style="margin-top:12px;"></div>
         </div>
 
         <div class="card">
@@ -908,8 +968,12 @@ MIIxxxxxx...
               <dd><span class="badge badge-warning" id="dash-api-status">Checking...</span></dd>
               <dt>Certificate</dt>
               <dd><span class="badge badge-warning" id="dash-cert-status">Checking...</span></dd>
-              <dt>Stripe Payments</dt>
+              <dt>Stripe + ACH</dt>
               <dd><span class="badge badge-warning" id="dash-stripe-status">Checking...</span></dd>
+              <dt>QuickBooks</dt>
+              <dd><span class="badge badge-warning" id="dash-qb-status">Checking...</span></dd>
+              <dt>PayPal</dt>
+              <dd><span class="badge badge-warning" id="dash-pp-status">Checking...</span></dd>
             </dl>
           </div>
         </div>
@@ -1272,6 +1336,8 @@ MIIxxxxxx...
       const apiEl = document.getElementById('dash-api-status');
       const certEl = document.getElementById('dash-cert-status');
       const stripeEl = document.getElementById('dash-stripe-status');
+      const qbEl = document.getElementById('dash-qb-status');
+      const ppEl = document.getElementById('dash-pp-status');
       const stepsEl = document.getElementById('dash-steps-list');
 
       if (cfg.clientId) {
@@ -1291,20 +1357,47 @@ MIIxxxxxx...
       }
 
       if (cfg.hasStripeKey) {
-        stripeEl.textContent = 'Configured';
+        stripeEl.textContent = 'Card + ACH (Federal Reserve)';
         stripeEl.className = 'badge badge-success';
       } else {
         stripeEl.textContent = 'Not configured';
         stripeEl.className = 'badge badge-warning';
       }
 
+      window._qbConnected = !!cfg.hasQuickBooks;
+      if (cfg.hasQuickBooks) {
+        qbEl.textContent = 'Connected';
+        qbEl.className = 'badge badge-success';
+        var qbAutoEl = document.getElementById('qb-auto-status');
+        if (qbAutoEl) {
+          qbAutoEl.className = 'alert alert-info';
+          qbAutoEl.innerHTML = 'QuickBooks is connected. Credits will automatically sync as journal entries when you record submissions.';
+        }
+      } else if (cfg.qbConfigured) {
+        qbEl.textContent = 'Credentials saved (not connected)';
+        qbEl.className = 'badge badge-warning';
+      } else {
+        qbEl.textContent = 'Not configured';
+        qbEl.className = 'badge badge-warning';
+      }
+
+      window._ppConfigured = !!cfg.hasPayPal;
+      if (cfg.hasPayPal) {
+        ppEl.textContent = 'Configured (' + (cfg.ppEnvironment || 'sandbox') + ')';
+        ppEl.className = 'badge badge-success';
+      } else {
+        ppEl.textContent = 'Not configured';
+        ppEl.className = 'badge badge-warning';
+      }
+
       var steps = [];
       if (!cfg.clientId || !cfg.hasPrivateKey) steps.push('Go to Settings and configure your API Client ID and private key');
-      if (!cfg.hasStripeKey) steps.push('Add your Stripe secret key in Settings for payment processing');
+      if (!cfg.hasStripeKey && !cfg.hasPayPal) steps.push('Add Stripe or PayPal credentials in Settings for payment processing');
+      if (!cfg.hasQuickBooks) steps.push('Connect QuickBooks in Settings to auto-sync credits as journal entries');
       if (cfg.clientId && cfg.hasPrivateKey) steps.push('Use A2A OAuth to generate access tokens for the IRS API');
       if (cfg.clientId && cfg.hasPrivateKey) steps.push('Use Transmit 1099 to build and submit information returns');
       if (cfg.clientId && cfg.hasPrivateKey) steps.push('Go to Process & Pay to record acceptances, collect, and distribute');
-      if (cfg.clientId && cfg.hasPrivateKey && cfg.hasStripeKey) steps.push('Everything is set up! Record IRS acceptances and process payments.');
+      if (cfg.clientId && cfg.hasPrivateKey && (cfg.hasStripeKey || cfg.hasPayPal)) steps.push('Ready! Record IRS acceptances and process payments via Stripe/PayPal.');
       if (steps.length === 0) steps.push('All configured! You are ready to use the platform.');
       stepsEl.innerHTML = steps.map(function(s) { return '<li>' + s + '</li>'; }).join('');
     }
@@ -1445,6 +1538,9 @@ MIIxxxxxx...
     }
 
     // ── Submissions ─────────────────────────────────────────
+    window._qbConnected = false;
+    window._ppConfigured = false;
+
     async function recordSubmission() {
       const data = {
         transactionId: document.getElementById('sub-tx-id').value.trim(),
@@ -1469,7 +1565,34 @@ MIIxxxxxx...
         });
         const result = await res.json();
         if (!res.ok) throw new Error(result.error);
-        document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">Submission recorded and credit created. Transaction: ' + data.transactionId.substring(0, 16) + '... | Amount: $' + data.amount + '</div>';
+
+        var msg = 'Submission recorded and credit created. Transaction: ' + data.transactionId.substring(0, 16) + '... | Amount: $' + data.amount;
+
+        if (window._qbConnected) {
+          try {
+            var qbRes = await fetch('/api/quickbooks/create-credit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                amount: data.amount,
+                recipientName: data.recipientName,
+                transactionId: data.transactionId,
+                formType: data.formType,
+                notes: data.notes
+              })
+            });
+            var qbData = await qbRes.json();
+            if (qbRes.ok && qbData.success) {
+              msg += ' | QuickBooks: Journal Entry #' + qbData.journalEntryId + ' created';
+            } else {
+              msg += ' | QuickBooks sync failed: ' + (qbData.error || 'Unknown error');
+            }
+          } catch (qbErr) {
+            msg += ' | QuickBooks sync failed: ' + qbErr.message;
+          }
+        }
+
+        document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">' + msg + '</div>';
         document.getElementById('sub-tx-id').value = '';
         document.getElementById('sub-sub-id').value = '';
         document.getElementById('sub-receipt').value = '';
@@ -1512,7 +1635,10 @@ MIIxxxxxx...
 
           var actions = '';
           if (s.payoutStatus !== 'distributed') {
-            actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="collectPayment(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')">Collect</button>';
+            actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="collectPayment(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')" title="Stripe (Card + ACH Bank Transfer)">Collect (Stripe)</button>';
+            if (window._ppConfigured) {
+              actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;background:#0070ba;color:#fff;border:none;" onclick="collectPayPal(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')" title="PayPal Checkout">Collect (PayPal)</button>';
+            }
             actions += '<button class="btn btn-primary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="prefillDistribute(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')">Distribute</button>';
           }
           if (s.checkoutUrl) {
@@ -1555,10 +1681,26 @@ MIIxxxxxx...
         });
         var result = await res.json();
         if (!res.ok) throw new Error(result.error);
-        document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">Stripe payment link created! <a href="' + result.checkoutUrl + '" target="_blank" style="color:#22c55e;text-decoration:underline;font-weight:600;">Click here to open payment page</a> - share this link with the payer.</div>';
+        document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">Stripe payment link created (Card + ACH Bank Transfer)! <a href="' + result.checkoutUrl + '" target="_blank" style="color:#22c55e;text-decoration:underline;font-weight:600;">Click here to open payment page</a> - share this link with the payer. ACH payments go through Federal Reserve rails.</div>';
         loadSubmissions();
       } catch (err) {
         document.getElementById('sub-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+      }
+    }
+
+    async function collectPayPal(submissionId, amount, recipientName) {
+      try {
+        var res = await fetch('/api/paypal/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ submissionId: submissionId, amount: amount, recipientName: recipientName, description: 'IRS 1099 Credit - ' + recipientName })
+        });
+        var result = await res.json();
+        if (!res.ok) throw new Error(result.error || JSON.stringify(result.detail));
+        document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">PayPal order created! <a href="' + result.approveUrl + '" target="_blank" style="color:#0070ba;text-decoration:underline;font-weight:600;">Click here to pay via PayPal</a> - share this link with the payer.</div>';
+        loadSubmissions();
+      } catch (err) {
+        document.getElementById('sub-result').innerHTML = '<div class="alert alert-error">PayPal Error: ' + err.message + '</div>';
       }
     }
 
@@ -1571,6 +1713,7 @@ MIIxxxxxx...
 
     async function processDistribution() {
       var subId = document.getElementById('pay-sub-id').value;
+      var method = document.getElementById('pay-method').value;
       var data = {
         submissionId: subId,
         amount: document.getElementById('pay-amount').value.trim(),
@@ -1585,14 +1728,21 @@ MIIxxxxxx...
       }
 
       try {
-        var res = await fetch('/api/stripe/send-payout', {
+        var endpoint = method === 'paypal' ? '/api/paypal/send-payout' : '/api/stripe/send-payout';
+        var res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
         });
         var result = await res.json();
-        if (!res.ok) throw new Error(result.error);
-        document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">Payment sent via Stripe! ID: ' + (result.stripePaymentIntent ? result.stripePaymentIntent.id : 'N/A') + '</div>';
+        if (!res.ok) throw new Error(result.error || JSON.stringify(result.detail));
+
+        var payId = method === 'paypal'
+          ? (result.paypalBatch ? result.paypalBatch.payout_batch_id : 'N/A')
+          : (result.stripePaymentIntent ? result.stripePaymentIntent.id : 'N/A');
+        var via = method === 'paypal' ? 'PayPal' : 'Stripe';
+
+        document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">Payment sent via ' + via + '! ID: ' + payId + '</div>';
         document.getElementById('pay-amount').value = '';
         document.getElementById('pay-email').value = '';
         document.getElementById('pay-name').value = '';
@@ -1656,6 +1806,75 @@ MIIxxxxxx...
         if (item.dataset.page === 'submissions') { loadSubmissions(); loadPayouts(); }
       });
     });
+
+    // ── QuickBooks Functions ───────────────────────────────
+    async function saveQBConfig() {
+      var data = {
+        qbClientId: document.getElementById('cfg-qb-client-id').value.trim(),
+        qbClientSecret: document.getElementById('cfg-qb-secret').value.trim(),
+        qbEnvironment: document.getElementById('cfg-qb-env').value
+      };
+      if (!data.qbClientId || !data.qbClientSecret) { alert('QuickBooks Client ID and Secret are required'); return; }
+      try {
+        var res = await fetch('/api/quickbooks/config', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+        });
+        var result = await res.json();
+        if (!res.ok) throw new Error(result.error);
+        document.getElementById('qb-status').innerHTML = '<div class="alert alert-success">' + result.message + '</div>';
+      } catch (err) {
+        document.getElementById('qb-status').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+      }
+    }
+
+    async function connectQuickBooks() {
+      try {
+        var res = await fetch('/api/quickbooks/connect');
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        window.open(data.authUrl, '_blank', 'width=600,height=700');
+        document.getElementById('qb-status').innerHTML = '<div class="alert alert-info">QuickBooks login window opened. Complete the authorization there, then refresh this page.</div>';
+      } catch (err) {
+        document.getElementById('qb-status').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+      }
+    }
+
+    async function loadQBStatus() {
+      try {
+        var res = await fetch('/api/quickbooks/status');
+        var data = await res.json();
+        var el = document.getElementById('qb-status');
+        if (data.connected) {
+          el.innerHTML = '<div class="alert alert-success">Connected to QuickBooks (Realm: ' + data.realmId + ', ' + data.environment + '). Credits will auto-sync.</div>';
+          document.getElementById('btn-qb-connect').textContent = 'Reconnect QuickBooks';
+        } else if (data.configured) {
+          el.innerHTML = '<div class="alert alert-warning">Credentials saved but not connected yet. Click "Connect QuickBooks" to authorize.</div>';
+        }
+      } catch (_) {}
+    }
+
+    // ── PayPal Functions ────────────────────────────────────
+    async function savePayPalConfig() {
+      var data = {
+        ppClientId: document.getElementById('cfg-pp-client-id').value.trim(),
+        ppClientSecret: document.getElementById('cfg-pp-secret').value.trim(),
+        ppEnvironment: document.getElementById('cfg-pp-env').value
+      };
+      if (!data.ppClientId || !data.ppClientSecret) { alert('PayPal Client ID and Secret are required'); return; }
+      try {
+        var res = await fetch('/api/paypal/config', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+        });
+        var result = await res.json();
+        if (!res.ok) throw new Error(result.error);
+        document.getElementById('pp-status').innerHTML = '<div class="alert alert-success">' + result.message + '</div>';
+        window._ppConfigured = true;
+      } catch (err) {
+        document.getElementById('pp-status').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+      }
+    }
+
+    loadQBStatus();
 
     // ── Utility ─────────────────────────────────────────────
     function copyToClipboard(elementId) {
