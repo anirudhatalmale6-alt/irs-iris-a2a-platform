@@ -320,6 +320,7 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
+  <script src="api-config.js"></script>
 </head>
 <body>
   <div class="app">
@@ -341,13 +342,7 @@
         <span class="nav-icon">&#128228;</span> Transmit 1099
       </div>
       <div class="nav-item" data-page="submissions">
-        <span class="nav-icon">&#128203;</span> Credits
-      </div>
-      <div class="nav-item" data-page="settlement">
-        <span class="nav-icon">&#127974;</span> Settlement
-      </div>
-      <div class="nav-item" data-page="payouts">
-        <span class="nav-icon">&#128176;</span> Distribute
+        <span class="nav-icon">&#128176;</span> Process &amp; Pay
       </div>
       <div class="nav-item" data-page="settings">
         <span class="nav-icon">&#9881;</span> Settings
@@ -723,15 +718,15 @@ MIIxxxxxx...
         </div>
       </div>
 
-      <!-- ── Submissions Page ────────────────────────────────── -->
+      <!-- ── Process & Pay Page ────────────────────────────── -->
       <div id="page-submissions" class="page hidden">
         <div class="page-header">
-          <h2>Submissions &amp; Credits</h2>
-          <p>Record IRS-accepted submissions, process credits, and distribute to third parties</p>
+          <h2>Process &amp; Pay</h2>
+          <p>Record IRS acceptances, collect payments, and distribute funds - all through Stripe</p>
         </div>
 
-        <div class="alert alert-info">
-          Workflow: File 1099 in IRIS &#8594; IRS Accepts &#8594; Record acceptance here &#8594; Process credits &#8594; Distribute to third parties
+        <div class="alert alert-success" style="font-size:14px;">
+          <strong>Simple 3-step flow:</strong> Record IRS acceptance &#8594; Collect payment via Stripe &#8594; Distribute to third parties via Stripe
         </div>
 
         <!-- Step 1: Record IRS Acceptance -->
@@ -779,32 +774,26 @@ MIIxxxxxx...
 
         <div id="sub-result" style="margin-top: 16px;"></div>
 
-        <!-- Submissions Table -->
+        <!-- Step 2: Submissions Table with Actions -->
         <div class="card" style="margin-top: 24px;">
-          <div class="card-title">&#128203; Accepted Submissions &amp; Credits</div>
+          <div class="card-title">&#9313; Your Credits - Collect &amp; Distribute</div>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Click "Collect" to create a Stripe payment link, or "Distribute" to send funds to a third party.</p>
           <div id="submissions-list" style="font-size:13px;color:var(--text-dim);">Loading...</div>
         </div>
-      </div>
 
-      <!-- ── Payouts Page ────────────────────────────────────── -->
-      <div id="page-payouts" class="page hidden">
-        <div class="page-header">
-          <h2>Distribute Funds</h2>
-          <p>Send payments to third parties from processed credits</p>
-        </div>
-
-        <div class="card">
-          <div class="card-title">&#128176; New Distribution</div>
-          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Distribute funds to third parties linked to accepted IRS submissions.</p>
+        <!-- Quick Distribute Form -->
+        <div class="card" style="margin-top: 24px;" id="distribute-section">
+          <div class="card-title">&#9314; Distribute Funds via Stripe</div>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Send payment to a third party from a recorded credit.</p>
           <div class="grid-2">
             <div class="form-group">
-              <label>Linked Submission / Transaction ID</label>
+              <label>Linked Submission</label>
               <select id="pay-sub-id">
                 <option value="">-- Select a submission --</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Distribution Amount (USD)</label>
+              <label>Amount (USD)</label>
               <input type="text" id="pay-amount" placeholder="0.00">
             </div>
             <div class="form-group">
@@ -820,155 +809,21 @@ MIIxxxxxx...
             <label>Description</label>
             <input type="text" id="pay-desc" placeholder="Payment description">
           </div>
-          <button class="btn btn-primary" onclick="processPayout()" style="width:100%;padding:14px;">&#128176; Process Distribution</button>
+          <button class="btn btn-primary" onclick="processDistribution()" style="width:100%;padding:14px;">&#128176; Send Payment via Stripe</button>
+          <div id="pay-result" style="margin-top: 12px;"></div>
         </div>
 
-        <div id="pay-result" style="margin-top: 16px;"></div>
-
+        <!-- Payment History -->
         <div class="card" style="margin-top: 24px;">
-          <div class="card-title">&#128176; Distribution History</div>
+          <div class="card-title">&#128203; Payment History</div>
           <div id="payouts-list" style="font-size:13px;color:var(--text-dim);">Loading...</div>
         </div>
 
+        <!-- Balance -->
         <div class="card" style="margin-top: 24px;">
           <div class="card-title">&#128179; Stripe Account Balance</div>
           <div id="stripe-balance" style="font-size:13px;color:var(--text-dim);">Click to check balance</div>
           <button class="btn btn-secondary" onclick="checkBalance()" style="margin-top:12px;">&#128179; Check Balance</button>
-        </div>
-      </div>
-
-      <!-- ── SWIFT Settlement Page ──────────────────────────── -->
-      <div id="page-settlement" class="page hidden">
-        <div class="page-header">
-          <h2>SWIFT Settlement</h2>
-          <p>Settle IRS-accepted transactions through the SWIFT banking network using Unique Transaction Identifiers (UTI)</p>
-        </div>
-
-        <div class="alert alert-info">
-          Flow: File 1099 in IRIS &#8594; IRS Accepts &#8594; Record Credit &#8594; Generate UTI &#8594; SWIFT Settlement &#8594; Distribute Funds
-        </div>
-
-        <!-- SWIFT Bank Configuration -->
-        <div class="card">
-          <div class="card-title">&#127974; Your SWIFT Bank Configuration</div>
-          <div id="swift-config-status" style="margin-bottom:16px;"></div>
-          <div class="grid-2">
-            <div class="form-group">
-              <label>SWIFT / BIC Code</label>
-              <input type="text" id="swift-bic" placeholder="e.g. CHASUS33">
-            </div>
-            <div class="form-group">
-              <label>Bank Name</label>
-              <input type="text" id="swift-bank-name" placeholder="e.g. JPMorgan Chase">
-            </div>
-            <div class="form-group">
-              <label>Account Number</label>
-              <input type="text" id="swift-account" placeholder="Your bank account number">
-            </div>
-            <div class="form-group">
-              <label>Account Holder Name</label>
-              <input type="text" id="swift-account-name" placeholder="Name on the account">
-            </div>
-            <div class="form-group">
-              <label>IBAN (if applicable)</label>
-              <input type="text" id="swift-iban" placeholder="International Bank Account Number">
-            </div>
-            <div class="form-group">
-              <label>SWIFT Message Type</label>
-              <select id="swift-msg-type">
-                <option value="MT103">MT103 - Customer Transfer</option>
-                <option value="MT202">MT202 - Bank-to-Bank Transfer</option>
-                <option value="MT199">MT199 - Free Format (General)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Correspondent Bank BIC (optional)</label>
-              <input type="text" id="swift-corr-bic" placeholder="Intermediary bank BIC">
-            </div>
-            <div class="form-group">
-              <label>Correspondent Bank Name (optional)</label>
-              <input type="text" id="swift-corr-bank" placeholder="Intermediary bank name">
-            </div>
-          </div>
-          <button class="btn btn-primary" onclick="saveSwiftConfig()" style="width:100%;padding:14px;">&#128190; Save SWIFT Configuration</button>
-          <div id="swift-config-result" style="margin-top:12px;"></div>
-        </div>
-
-        <!-- Initiate Settlement -->
-        <div class="card" style="margin-top:24px;">
-          <div class="card-title">&#128176; Initiate SWIFT Settlement</div>
-          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Select an IRS-accepted submission and enter the beneficiary details to generate a SWIFT settlement message with a mapped UTI.</p>
-          <div class="grid-2">
-            <div class="form-group">
-              <label>Linked IRS Submission</label>
-              <select id="stl-sub-id" onchange="populateSettlementFromSub()">
-                <option value="">-- Select a submission --</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>IRS Transaction ID</label>
-              <input type="text" id="stl-tx-id" placeholder="Auto-filled from submission">
-            </div>
-            <div class="form-group">
-              <label>Settlement Amount (USD)</label>
-              <input type="text" id="stl-amount" placeholder="0.00">
-            </div>
-            <div class="form-group">
-              <label>Currency</label>
-              <select id="stl-currency">
-                <option value="USD">USD - US Dollar</option>
-                <option value="EUR">EUR - Euro</option>
-                <option value="GBP">GBP - British Pound</option>
-                <option value="CHF">CHF - Swiss Franc</option>
-                <option value="JPY">JPY - Japanese Yen</option>
-              </select>
-            </div>
-          </div>
-          <div style="border-top:1px solid var(--border);margin:16px 0;padding-top:16px;">
-            <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--accent);">Beneficiary Details</div>
-            <div class="grid-2">
-              <div class="form-group">
-                <label>Beneficiary Name</label>
-                <input type="text" id="stl-ben-name" placeholder="Full legal name">
-              </div>
-              <div class="form-group">
-                <label>Beneficiary Account Number</label>
-                <input type="text" id="stl-ben-account" placeholder="Bank account number">
-              </div>
-              <div class="form-group">
-                <label>Beneficiary SWIFT / BIC</label>
-                <input type="text" id="stl-ben-bic" placeholder="e.g. BOFAUS3N">
-              </div>
-              <div class="form-group">
-                <label>Beneficiary Bank Name</label>
-                <input type="text" id="stl-ben-bank" placeholder="e.g. Bank of America">
-              </div>
-            </div>
-            <div class="form-group">
-              <label>Reference / Notes</label>
-              <input type="text" id="stl-reference" placeholder="Optional reference for this settlement">
-            </div>
-          </div>
-          <button class="btn btn-primary" onclick="initiateSettlement()" style="width:100%;padding:14px;">&#127974; Generate UTI &amp; Initiate Settlement</button>
-          <div id="stl-result" style="margin-top:12px;"></div>
-        </div>
-
-        <!-- Settlement Result / SWIFT Message -->
-        <div id="stl-message-section" class="card hidden" style="margin-top:24px;">
-          <div class="card-title">&#128196; Generated SWIFT Message</div>
-          <div id="stl-uti-display" style="margin-bottom:16px;"></div>
-          <div class="output-box" id="stl-swift-output" style="font-size:12px;">
-            <button class="copy-btn" onclick="copyToClipboard('stl-swift-output')">Copy</button>
-          </div>
-          <div style="margin-top:16px;">
-            <div class="alert alert-warning">Submit this SWIFT message through your bank's SWIFT portal or treasury management system to execute the settlement.</div>
-          </div>
-        </div>
-
-        <!-- Settlement History -->
-        <div class="card" style="margin-top:24px;">
-          <div class="card-title">&#128203; Settlement History</div>
-          <div id="settlements-list" style="font-size:13px;color:var(--text-dim);">Loading...</div>
         </div>
       </div>
 
@@ -1053,10 +908,8 @@ MIIxxxxxx...
               <dd><span class="badge badge-warning" id="dash-api-status">Checking...</span></dd>
               <dt>Certificate</dt>
               <dd><span class="badge badge-warning" id="dash-cert-status">Checking...</span></dd>
-              <dt>Stripe</dt>
+              <dt>Stripe Payments</dt>
               <dd><span class="badge badge-warning" id="dash-stripe-status">Checking...</span></dd>
-              <dt>SWIFT</dt>
-              <dd><span class="badge badge-warning" id="dash-swift-status">Checking...</span></dd>
             </dl>
           </div>
         </div>
@@ -1071,7 +924,6 @@ MIIxxxxxx...
     </main>
   </div>
 
-  <script src="api-config.js"></script>
   <script>
     // ── API base URL (set via api-config.js for remote deployments) ──
     if (!window.API_BASE) window.API_BASE = '';
@@ -1446,23 +1298,13 @@ MIIxxxxxx...
         stripeEl.className = 'badge badge-warning';
       }
 
-      var swiftEl = document.getElementById('dash-swift-status');
-      if (cfg.hasSwiftConfig) {
-        swiftEl.textContent = 'Configured';
-        swiftEl.className = 'badge badge-success';
-      } else {
-        swiftEl.textContent = 'Not configured';
-        swiftEl.className = 'badge badge-warning';
-      }
-
       var steps = [];
       if (!cfg.clientId || !cfg.hasPrivateKey) steps.push('Go to Settings and configure your API Client ID and private key');
-      if (!cfg.hasSwiftConfig) steps.push('Go to Settlement and configure your SWIFT bank details');
       if (!cfg.hasStripeKey) steps.push('Add your Stripe secret key in Settings for payment processing');
       if (cfg.clientId && cfg.hasPrivateKey) steps.push('Use A2A OAuth to generate access tokens for the IRS API');
       if (cfg.clientId && cfg.hasPrivateKey) steps.push('Use Transmit 1099 to build and submit information returns');
-      if (cfg.hasSwiftConfig) steps.push('Use Settlement to generate UTIs and SWIFT messages for IRS transactions');
-      if (cfg.clientId && cfg.hasPrivateKey && cfg.hasStripeKey) steps.push('Process payouts to third parties via the Distribute page');
+      if (cfg.clientId && cfg.hasPrivateKey) steps.push('Go to Process & Pay to record acceptances, collect, and distribute');
+      if (cfg.clientId && cfg.hasPrivateKey && cfg.hasStripeKey) steps.push('Everything is set up! Record IRS acceptances and process payments.');
       if (steps.length === 0) steps.push('All configured! You are ready to use the platform.');
       stepsEl.innerHTML = steps.map(function(s) { return '<li>' + s + '</li>'; }).join('');
     }
@@ -1654,28 +1496,39 @@ MIIxxxxxx...
         }
 
         var totalCredits = 0;
-        var html = '<table style="width:100%;border-collapse:collapse;">';
-        html += '<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:8px;">Transaction ID</th><th style="text-align:left;padding:8px;">Form</th><th style="text-align:left;padding:8px;">Entity</th><th style="text-align:left;padding:8px;">Credit</th><th style="text-align:left;padding:8px;">Status</th><th style="text-align:left;padding:8px;">Date</th></tr>';
+        var html = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">';
+        html += '<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:8px;">Transaction ID</th><th style="text-align:left;padding:8px;">Form</th><th style="text-align:left;padding:8px;">Entity</th><th style="text-align:left;padding:8px;">Credit</th><th style="text-align:left;padding:8px;">Status</th><th style="text-align:left;padding:8px;">Actions</th></tr>';
 
         var subs = data.submissions.slice().reverse();
         for (var i = 0; i < subs.length; i++) {
           var s = subs[i];
           totalCredits += parseFloat(s.amount) || 0;
+
           var statusBadge = s.payoutStatus === 'distributed'
-            ? '<span class="badge badge-success">Distributed</span>'
-            : s.payoutStatus === 'partial'
-            ? '<span class="badge badge-warning">Partial</span>'
-            : '<span class="badge badge-info" style="background:#2563eb;color:#fff;">Credit Ready</span>';
+            ? '<span class="badge badge-success">Paid Out</span>'
+            : s.collectStatus === 'link_created'
+            ? '<span class="badge badge-warning">Collecting</span>'
+            : '<span class="badge badge-info" style="background:#2563eb;color:#fff;">Ready</span>';
+
+          var actions = '';
+          if (s.payoutStatus !== 'distributed') {
+            actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="collectPayment(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')">Collect</button>';
+            actions += '<button class="btn btn-primary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="prefillDistribute(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')">Distribute</button>';
+          }
+          if (s.checkoutUrl) {
+            actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="window.open(\'' + s.checkoutUrl + '\', \'_blank\')">Payment Link</button>';
+          }
+
           html += '<tr style="border-bottom:1px solid var(--border);">';
-          html += '<td style="padding:8px;font-family:monospace;">' + (s.transactionId || '').substring(0, 16) + '...</td>';
+          html += '<td style="padding:8px;font-family:monospace;font-size:12px;">' + (s.transactionId || '').substring(0, 16) + '...</td>';
           html += '<td style="padding:8px;">' + s.formType + '</td>';
           html += '<td style="padding:8px;">' + (s.recipientName || '') + '</td>';
           html += '<td style="padding:8px;color:#22c55e;font-weight:600;">$' + (s.amount || '0') + '</td>';
           html += '<td style="padding:8px;">' + statusBadge + '</td>';
-          html += '<td style="padding:8px;">' + new Date(s.createdAt).toLocaleDateString() + '</td>';
+          html += '<td style="padding:8px;">' + actions + '</td>';
           html += '</tr>';
         }
-        html += '</table>';
+        html += '</table></div>';
         html += '<div style="margin-top:12px;padding:12px;background:var(--surface2);border-radius:8px;"><strong>Total Credits:</strong> <span style="color:#22c55e;font-size:18px;font-weight:700;">$' + totalCredits.toFixed(2) + '</span></div>';
         el.innerHTML = html;
 
@@ -1683,7 +1536,9 @@ MIIxxxxxx...
           paySelect.innerHTML = '<option value="">-- Select a submission --</option>';
           for (var j = 0; j < subs.length; j++) {
             var sub = subs[j];
-            paySelect.innerHTML += '<option value="' + sub.transactionId + '">' + sub.formType + ' - $' + sub.amount + ' - ' + (sub.recipientName || sub.transactionId.substring(0, 12)) + '</option>';
+            if (sub.payoutStatus !== 'distributed') {
+              paySelect.innerHTML += '<option value="' + sub.transactionId + '" data-amount="' + (sub.amount || '0') + '" data-name="' + (sub.recipientName || '') + '">' + sub.formType + ' - $' + sub.amount + ' - ' + (sub.recipientName || sub.transactionId.substring(0, 12)) + '</option>';
+            }
           }
         }
       } catch (e) {
@@ -1691,8 +1546,30 @@ MIIxxxxxx...
       }
     }
 
-    // ── Distributions ───────────────────────────────────────────────
-    async function processPayout() {
+    async function collectPayment(submissionId, amount, recipientName) {
+      try {
+        var res = await fetch('/api/stripe/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ submissionId: submissionId, amount: amount, recipientName: recipientName, description: 'IRS 1099 - ' + recipientName })
+        });
+        var result = await res.json();
+        if (!res.ok) throw new Error(result.error);
+        document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">Stripe payment link created! <a href="' + result.checkoutUrl + '" target="_blank" style="color:#22c55e;text-decoration:underline;font-weight:600;">Click here to open payment page</a> - share this link with the payer.</div>';
+        loadSubmissions();
+      } catch (err) {
+        document.getElementById('sub-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+      }
+    }
+
+    function prefillDistribute(submissionId, amount, recipientName) {
+      document.getElementById('pay-sub-id').value = submissionId;
+      document.getElementById('pay-amount').value = amount;
+      document.getElementById('pay-name').value = recipientName;
+      document.getElementById('distribute-section').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function processDistribution() {
       var subId = document.getElementById('pay-sub-id').value;
       var data = {
         submissionId: subId,
@@ -1708,18 +1585,19 @@ MIIxxxxxx...
       }
 
       try {
-        var res = await fetch('/api/stripe/payout', {
+        var res = await fetch('/api/stripe/send-payout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
         });
         var result = await res.json();
         if (!res.ok) throw new Error(result.error);
-        document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">Distribution processed. Stripe ID: ' + (result.stripePaymentIntent ? result.stripePaymentIntent.id : 'N/A') + '</div>';
+        document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">Payment sent via Stripe! ID: ' + (result.stripePaymentIntent ? result.stripePaymentIntent.id : 'N/A') + '</div>';
         document.getElementById('pay-amount').value = '';
         document.getElementById('pay-email').value = '';
         document.getElementById('pay-name').value = '';
         document.getElementById('pay-desc').value = '';
+        loadSubmissions();
         loadPayouts();
       } catch (err) {
         document.getElementById('pay-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
@@ -1733,7 +1611,7 @@ MIIxxxxxx...
         var el = document.getElementById('payouts-list');
 
         if (!data.payouts || data.payouts.length === 0) {
-          el.innerHTML = '<p>No distributions yet. Record submissions first, then distribute funds from here.</p>';
+          el.innerHTML = '<p>No payments yet. Record a submission and distribute funds above.</p>';
           return;
         }
 
@@ -1744,9 +1622,9 @@ MIIxxxxxx...
         for (var i = 0; i < payouts.length; i++) {
           var p = payouts[i];
           html += '<tr style="border-bottom:1px solid var(--border);">';
-          html += '<td style="padding:8px;font-family:monospace;">' + (p.stripeId || '').substring(0, 20) + '...</td>';
+          html += '<td style="padding:8px;font-family:monospace;font-size:12px;">' + (p.stripeId || '').substring(0, 20) + '...</td>';
           html += '<td style="padding:8px;">' + (p.recipientName || p.recipientEmail || '') + '</td>';
-          html += '<td style="padding:8px;">$' + p.amount + '</td>';
+          html += '<td style="padding:8px;color:#22c55e;font-weight:600;">$' + p.amount + '</td>';
           html += '<td style="padding:8px;"><span class="badge badge-success">' + p.status + '</span></td>';
           html += '<td style="padding:8px;">' + new Date(p.createdAt).toLocaleDateString() + '</td>';
           html += '</tr>';
@@ -1754,7 +1632,7 @@ MIIxxxxxx...
         html += '</table>';
         el.innerHTML = html;
       } catch (e) {
-        document.getElementById('payouts-list').innerHTML = '<p>Failed to load distributions.</p>';
+        document.getElementById('payouts-list').innerHTML = '<p>Failed to load payments.</p>';
       }
     }
 
@@ -1772,175 +1650,10 @@ MIIxxxxxx...
       }
     }
 
-    // ── SWIFT Settlement ──────────────────────────────────────
-    async function loadSwiftConfig() {
-      try {
-        var res = await fetch('/api/swift/config');
-        var data = await res.json();
-        var el = document.getElementById('swift-config-status');
-        if (data.configured) {
-          el.innerHTML = '<div class="alert alert-success">SWIFT bank configured: ' + data.bankName + ' (' + data.swiftBIC + ') - Account: ' + data.accountNumber + '</div>';
-        } else {
-          el.innerHTML = '<div class="alert alert-warning">SWIFT bank not configured yet. Enter your bank details below.</div>';
-        }
-      } catch (e) {}
-    }
-
-    async function saveSwiftConfig() {
-      var data = {
-        swiftBIC: document.getElementById('swift-bic').value.trim(),
-        bankName: document.getElementById('swift-bank-name').value.trim(),
-        accountNumber: document.getElementById('swift-account').value.trim(),
-        accountName: document.getElementById('swift-account-name').value.trim(),
-        iban: document.getElementById('swift-iban').value.trim(),
-        messageType: document.getElementById('swift-msg-type').value,
-        correspondentBIC: document.getElementById('swift-corr-bic').value.trim(),
-        correspondentBank: document.getElementById('swift-corr-bank').value.trim()
-      };
-      if (!data.swiftBIC || !data.bankName || !data.accountNumber) {
-        alert('SWIFT BIC, Bank Name, and Account Number are required');
-        return;
-      }
-      try {
-        var res = await fetch('/api/swift/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-        var result = await res.json();
-        if (!res.ok) throw new Error(result.error);
-        document.getElementById('swift-config-result').innerHTML = '<div class="alert alert-success">SWIFT bank configuration saved successfully.</div>';
-        loadSwiftConfig();
-      } catch (err) {
-        document.getElementById('swift-config-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
-      }
-    }
-
-    function populateSettlementFromSub() {
-      var sel = document.getElementById('stl-sub-id');
-      var opt = sel.options[sel.selectedIndex];
-      if (opt && opt.dataset && opt.dataset.txid) {
-        document.getElementById('stl-tx-id').value = opt.dataset.txid;
-        document.getElementById('stl-amount').value = opt.dataset.amount || '';
-      }
-    }
-
-    async function loadSettlementSubmissions() {
-      try {
-        var res = await fetch('/api/submissions');
-        var data = await res.json();
-        var sel = document.getElementById('stl-sub-id');
-        sel.innerHTML = '<option value="">-- Select a submission --</option>';
-        if (data.submissions && data.submissions.length > 0) {
-          var subs = data.submissions.slice().reverse();
-          for (var i = 0; i < subs.length; i++) {
-            var s = subs[i];
-            var opt = document.createElement('option');
-            opt.value = s.transactionId;
-            opt.dataset.txid = s.transactionId;
-            opt.dataset.amount = s.amount || '0';
-            opt.textContent = s.formType + ' - $' + (s.amount || '0') + ' - ' + (s.recipientName || s.transactionId.substring(0, 12));
-            sel.appendChild(opt);
-          }
-        }
-      } catch (e) {}
-    }
-
-    async function initiateSettlement() {
-      var data = {
-        submissionId: document.getElementById('stl-sub-id').value,
-        transactionId: document.getElementById('stl-tx-id').value.trim(),
-        amount: document.getElementById('stl-amount').value.trim(),
-        currency: document.getElementById('stl-currency').value,
-        beneficiaryName: document.getElementById('stl-ben-name').value.trim(),
-        beneficiaryAccount: document.getElementById('stl-ben-account').value.trim(),
-        beneficiaryBIC: document.getElementById('stl-ben-bic').value.trim(),
-        beneficiaryBank: document.getElementById('stl-ben-bank').value.trim(),
-        reference: document.getElementById('stl-reference').value.trim()
-      };
-      if (!data.transactionId || !data.amount || !data.beneficiaryName || !data.beneficiaryAccount || !data.beneficiaryBIC) {
-        alert('Transaction ID, amount, beneficiary name, account, and BIC are all required');
-        return;
-      }
-      try {
-        var res = await fetch('/api/swift/settle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-        var result = await res.json();
-        if (!res.ok) throw new Error(result.error);
-
-        document.getElementById('stl-result').innerHTML = '<div class="alert alert-success">Settlement initiated. UTI: ' + result.uti + ' | Ref: ' + result.settlementRef + '</div>';
-
-        var utiEl = document.getElementById('stl-uti-display');
-        utiEl.innerHTML = '<div style="padding:16px;background:var(--surface2);border-radius:8px;margin-bottom:12px;">' +
-          '<div style="font-size:12px;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px;">Unique Transaction Identifier (UTI)</div>' +
-          '<div style="font-size:18px;font-weight:700;color:var(--success);font-family:monospace;word-break:break-all;">' + result.uti + '</div>' +
-          '<div style="font-size:12px;color:var(--text-dim);margin-top:8px;">IRS Transaction: ' + data.transactionId.substring(0, 24) + '...</div>' +
-          '</div>';
-
-        var msg = result.swiftMessage;
-        var swiftText = '===== SWIFT ' + msg.messageType + ' MESSAGE =====\n\n';
-        swiftText += ':20: Transaction Ref: ' + msg.transactionRef + '\n';
-        swiftText += ':23B: CRED\n';
-        swiftText += ':32A: ' + msg.valueDate + msg.currency + msg.amount + '\n';
-        swiftText += ':50K: /' + msg.orderingCustomer.account + '\n';
-        swiftText += '    ' + msg.orderingCustomer.name + '\n';
-        swiftText += ':52A: ' + msg.orderingCustomer.bic + '\n';
-        swiftText += ':57A: ' + msg.beneficiary.bic + '\n';
-        if (msg.beneficiary.bank) swiftText += '    ' + msg.beneficiary.bank + '\n';
-        swiftText += ':59: /' + msg.beneficiary.account + '\n';
-        swiftText += '    ' + msg.beneficiary.name + '\n';
-        swiftText += ':70: ' + msg.remittanceInfo + '\n';
-        swiftText += ':71A: OUR\n\n';
-        swiftText += '===== UTI MAPPING =====\n';
-        swiftText += 'IRS Transaction ID: ' + msg.irsTransactionId + '\n';
-        swiftText += 'SWIFT UTI: ' + result.uti + '\n';
-        swiftText += 'Settlement Ref: ' + result.settlementRef + '\n';
-
-        document.getElementById('stl-swift-output').textContent = swiftText;
-        document.getElementById('stl-message-section').classList.remove('hidden');
-
-        loadSettlements();
-      } catch (err) {
-        document.getElementById('stl-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
-      }
-    }
-
-    async function loadSettlements() {
-      try {
-        var res = await fetch('/api/swift/settlements');
-        var data = await res.json();
-        var el = document.getElementById('settlements-list');
-
-        if (!data.settlements || data.settlements.length === 0) {
-          el.innerHTML = '<p>No settlements yet. Configure your SWIFT bank and initiate a settlement above.</p>';
-          return;
-        }
-
-        var html = '<table style="width:100%;border-collapse:collapse;">';
-        html += '<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:8px;">Ref</th><th style="text-align:left;padding:8px;">UTI</th><th style="text-align:left;padding:8px;">Beneficiary</th><th style="text-align:left;padding:8px;">Amount</th><th style="text-align:left;padding:8px;">Type</th><th style="text-align:left;padding:8px;">Status</th><th style="text-align:left;padding:8px;">Date</th></tr>';
-
-        var settlements = data.settlements.slice().reverse();
-        for (var i = 0; i < settlements.length; i++) {
-          var s = settlements[i];
-          var statusClass = s.status === 'completed' ? 'badge-success' : s.status === 'initiated' ? 'badge-warning' : 'badge-error';
-          html += '<tr style="border-bottom:1px solid var(--border);">';
-          html += '<td style="padding:8px;font-family:monospace;font-size:12px;">' + s.id + '</td>';
-          html += '<td style="padding:8px;font-family:monospace;font-size:11px;">' + (s.uti || '').substring(0, 20) + '...</td>';
-          html += '<td style="padding:8px;">' + s.beneficiaryName + '</td>';
-          html += '<td style="padding:8px;color:#22c55e;font-weight:600;">' + s.currency + ' ' + s.amount + '</td>';
-          html += '<td style="padding:8px;"><span class="badge badge-success">' + s.messageType + '</span></td>';
-          html += '<td style="padding:8px;"><span class="badge ' + statusClass + '">' + s.status + '</span></td>';
-          html += '<td style="padding:8px;">' + new Date(s.createdAt).toLocaleDateString() + '</td>';
-          html += '</tr>';
-        }
-        html += '</table>';
-        el.innerHTML = html;
-      } catch (e) {
-        document.getElementById('settlements-list').innerHTML = '<p>Failed to load settlements.</p>';
-      }
-    }
-
-    // Load data when navigating to submissions/payouts/settlement pages
+    // Load data when navigating to submissions page
     document.querySelectorAll('.nav-item').forEach(item => {
       item.addEventListener('click', () => {
-        if (item.dataset.page === 'submissions') loadSubmissions();
-        if (item.dataset.page === 'payouts') { loadPayouts(); loadSubmissions(); }
-        if (item.dataset.page === 'settlement') { loadSwiftConfig(); loadSettlementSubmissions(); loadSettlements(); }
+        if (item.dataset.page === 'submissions') { loadSubmissions(); loadPayouts(); }
       });
     });
 

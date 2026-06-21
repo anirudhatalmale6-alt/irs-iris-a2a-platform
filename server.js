@@ -643,6 +643,91 @@ api.get('/payouts', (req, res) => {
   res.json({ payouts: db.getPayouts() });
 });
 
+api.post('/stripe/checkout', async (req, res) => {
+  try {
+    if (!appConfig.stripeSecretKey) {
+      return res.status(400).json({ error: 'Stripe is not configured. Add your secret key in Settings.' });
+    }
+
+    const { submissionId, amount, recipientName, description } = req.body;
+    if (!amount) {
+      return res.status(400).json({ error: 'amount is required' });
+    }
+
+    const stripe = new StripePayouts(appConfig.stripeSecretKey);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+    const session = await stripe.stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      mode: 'payment',
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: description || `Payment for ${recipientName || 'IRS Submission'}`,
+            description: submissionId ? `IRS Transaction: ${submissionId.substring(0, 20)}...` : undefined
+          },
+          unit_amount: Math.round(parseFloat(amount) * 100)
+        },
+        quantity: 1
+      }],
+      success_url: `${baseUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}?payment=cancelled`,
+      metadata: { submissionId: submissionId || '', recipientName: recipientName || '' }
+    });
+
+    if (submissionId) {
+      db.updateSubmission(submissionId, { collectStatus: 'link_created', checkoutSessionId: session.id, checkoutUrl: session.url });
+    }
+
+    res.json({ success: true, checkoutUrl: session.url, sessionId: session.id });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+api.post('/stripe/send-payout', async (req, res) => {
+  try {
+    if (!appConfig.stripeSecretKey) {
+      return res.status(400).json({ error: 'Stripe is not configured. Add your secret key in Settings.' });
+    }
+
+    const { submissionId, amount, recipientEmail, recipientName, description } = req.body;
+    if (!amount || !recipientEmail) {
+      return res.status(400).json({ error: 'amount and recipientEmail are required' });
+    }
+
+    const stripe = new StripePayouts(appConfig.stripeSecretKey);
+    const paymentIntent = await stripe.createPaymentIntent({
+      amount: parseFloat(amount),
+      description: description || `Distribution to ${recipientName || recipientEmail}`,
+      metadata: {
+        submissionId: submissionId || '',
+        recipientName: recipientName || '',
+        recipientEmail
+      }
+    });
+
+    const payout = db.addPayout({
+      id: paymentIntent.id,
+      submissionId: submissionId || '',
+      recipientEmail,
+      recipientName: recipientName || '',
+      amount: parseFloat(amount),
+      status: paymentIntent.status,
+      stripeId: paymentIntent.id
+    });
+
+    if (submissionId) {
+      db.updateSubmission(submissionId, { payoutStatus: 'distributed', payoutId: paymentIntent.id });
+    }
+
+    res.json({ success: true, payout, stripePaymentIntent: paymentIntent });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ── SWIFT Settlement Routes ────────────────────────────────────────────────
 
 api.post('/swift/config', (req, res) => {
