@@ -356,7 +356,22 @@ function loadConfig() {
       return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
     }
   } catch (e) { /* ignore corrupt config */ }
-  return { clientId: null, privateKeyPem: null, environment: 'test', transmitterTIN: null, transmitterName: null, stripeSecretKey: null };
+  // Fall back to environment variables (for Render/cloud deployments)
+  const env = process.env;
+  return {
+    clientId: env.IRS_CLIENT_ID || null,
+    privateKeyPem: env.IRS_PRIVATE_KEY ? env.IRS_PRIVATE_KEY.replace(/\\n/g, '\n') : null,
+    environment: env.IRS_ENVIRONMENT || 'test',
+    transmitterTIN: env.IRS_TRANSMITTER_TIN || null,
+    transmitterName: env.IRS_TRANSMITTER_NAME || null,
+    stripeSecretKey: env.STRIPE_SECRET_KEY || null,
+    ppClientId: env.PAYPAL_CLIENT_ID || null,
+    ppClientSecret: env.PAYPAL_CLIENT_SECRET || null,
+    ppEnvironment: env.PAYPAL_ENVIRONMENT || 'sandbox',
+    qbClientId: env.QB_CLIENT_ID || null,
+    qbClientSecret: env.QB_CLIENT_SECRET || null,
+    qbEnvironment: env.QB_ENVIRONMENT || 'sandbox'
+  };
 }
 
 function saveConfig() {
