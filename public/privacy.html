@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - IRS IRIS A2A Integration Platform</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e4e7ef; line-height: 1.8; padding: 40px; max-width: 800px; margin: 0 auto; }
+    h1 { color: #4f7df9; margin-bottom: 8px; }
+    h2 { color: #4f7df9; margin-top: 32px; font-size: 20px; }
+    .date { color: #8b90a0; font-size: 14px; margin-bottom: 32px; }
+    p, li { color: #c4c7cf; font-size: 15px; }
+    a { color: #4f7df9; }
+    ul { padding-left: 24px; }
+    .back { display: inline-block; margin-bottom: 24px; color: #4f7df9; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <a href="/" class="back">Back to Application</a>
+  <h1>Privacy Policy</h1>
+  <p class="date">Last updated: June 21, 2026</p>
+
+  <h2>1. Introduction</h2>
+  <p>This Privacy Policy describes how IRS IRIS A2A Integration Platform ("we", "our", "the Platform") collects, uses, and protects your information when you use our tax filing and payment processing services.</p>
+
+  <h2>2. Information We Collect</h2>
+  <p>We collect the following types of information:</p>
+  <ul>
+    <li><strong>Tax Information:</strong> IRS transaction IDs, submission IDs, receipt numbers, form types, and associated amounts as entered by you for 1099 information return processing.</li>
+    <li><strong>Identity Information:</strong> Names, TINs (Tax Identification Numbers), and addresses provided for payer and recipient records in 1099 forms.</li>
+    <li><strong>Payment Information:</strong> Payment processing data required by Stripe and PayPal to facilitate fund collection and distribution. We do not store complete credit card numbers.</li>
+    <li><strong>QuickBooks Data:</strong> If you connect QuickBooks, we access your accounting data solely to create journal entries for IRS-accepted credits.</li>
+    <li><strong>Certificate Data:</strong> Digital certificates (PFX/PEM) uploaded for JWK generation are processed in memory and not permanently stored.</li>
+  </ul>
+
+  <h2>3. How We Use Your Information</h2>
+  <ul>
+    <li>To generate IRS-compliant JWK keys from your certificates</li>
+    <li>To facilitate A2A OAuth authentication with the IRS IRIS API</li>
+    <li>To build and submit 1099 information returns to the IRS</li>
+    <li>To track IRS-accepted submissions and associated credits</li>
+    <li>To process payments via Stripe and PayPal</li>
+    <li>To create journal entries in QuickBooks when connected</li>
+  </ul>
+
+  <h2>4. Data Storage and Security</h2>
+  <p>Your configuration data (API keys, private keys) is stored locally on the server and is not shared with third parties. All API communications use HTTPS encryption. Certificate files uploaded for JWK generation are deleted immediately after processing.</p>
+
+  <h2>5. Third-Party Services</h2>
+  <p>We integrate with the following third-party services, each governed by their own privacy policies:</p>
+  <ul>
+    <li><strong>IRS IRIS API:</strong> For submitting 1099 information returns</li>
+    <li><strong>Stripe:</strong> For payment processing (card and ACH bank transfers)</li>
+    <li><strong>PayPal:</strong> For payment collection and distribution</li>
+    <li><strong>Intuit QuickBooks:</strong> For accounting integration and credit tracking</li>
+  </ul>
+
+  <h2>6. Data Retention</h2>
+  <p>We retain submission records and payment history for as long as your account is active or as needed to comply with tax record-keeping requirements. You may request deletion of your data at any time.</p>
+
+  <h2>7. Your Rights</h2>
+  <p>You have the right to:</p>
+  <ul>
+    <li>Access your personal data</li>
+    <li>Request correction of inaccurate data</li>
+    <li>Request deletion of your data</li>
+    <li>Disconnect third-party integrations at any time</li>
+    <li>Export your submission and payment records</li>
+  </ul>
+
+  <h2>8. Contact</h2>
+  <p>For privacy-related inquiries, please contact the platform administrator.</p>
+</body>
+</html>
