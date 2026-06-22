@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Collection - IRS IRIS Platform</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e4e7ef; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .pay-container { max-width: 500px; width: 100%; }
+    .pay-card { background: #1a1d27; border: 1px solid #2d3140; border-radius: 12px; padding: 32px; margin-bottom: 20px; }
+    .logo { text-align: center; margin-bottom: 24px; }
+    .logo h1 { font-size: 22px; color: #4f7df9; font-weight: 700; }
+    .logo span { font-size: 12px; color: #8b90a0; }
+    .amount-display { text-align: center; padding: 24px 0; border-bottom: 1px solid #2d3140; margin-bottom: 24px; }
+    .amount-display .label { font-size: 13px; color: #8b90a0; margin-bottom: 4px; }
+    .amount-display .amount { font-size: 42px; font-weight: 700; color: #34d399; }
+    .amount-display .desc { font-size: 14px; color: #8b90a0; margin-top: 8px; }
+    .detail-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; border-bottom: 1px solid #232733; }
+    .detail-row .label { color: #8b90a0; }
+    .detail-row .value { color: #e4e7ef; font-weight: 500; }
+    .divider { height: 1px; background: #2d3140; margin: 20px 0; }
+    .pay-section { margin-top: 20px; }
+    .pay-section h3 { font-size: 15px; color: #e4e7ef; margin-bottom: 12px; text-align: center; }
+    .pay-btn { display: block; width: 100%; padding: 14px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 12px; transition: opacity 0.2s; }
+    .pay-btn:hover { opacity: 0.9; }
+    .btn-stripe { background: #635bff; color: #fff; }
+    .btn-wire { background: #2d3140; color: #e4e7ef; border: 1px solid #3d4150; }
+    #paypal-button-container { margin-bottom: 12px; min-height: 45px; }
+    .or-divider { text-align: center; color: #8b90a0; font-size: 12px; margin: 16px 0; position: relative; }
+    .or-divider::before, .or-divider::after { content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: #2d3140; }
+    .or-divider::before { left: 0; }
+    .or-divider::after { right: 0; }
+    .status-msg { text-align: center; padding: 16px; border-radius: 8px; margin-top: 16px; font-size: 14px; }
+    .status-success { background: rgba(52, 211, 153, 0.1); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); }
+    .status-error { background: rgba(248, 113, 113, 0.1); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); }
+    .status-pending { background: rgba(251, 191, 36, 0.1); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
+    .loading { text-align: center; padding: 40px; color: #8b90a0; }
+    .secure-badge { text-align: center; margin-top: 16px; font-size: 11px; color: #8b90a0; }
+  </style>
+</head>
+<body>
+  <div class="pay-container">
+    <div class="pay-card">
+      <div class="logo">
+        <h1>IRS IRIS Platform</h1>
+        <span>Secure Payment Collection</span>
+      </div>
+
+      <div id="loading" class="loading">Loading payment details...</div>
+
+      <div id="payment-content" style="display:none;">
+        <div class="amount-display">
+          <div class="label">Amount Due</div>
+          <div class="amount" id="pay-amount">$0.00</div>
+          <div class="desc" id="pay-description"></div>
+        </div>
+
+        <div class="detail-row">
+          <span class="label">Reference</span>
+          <span class="value" id="pay-ref">-</span>
+        </div>
+        <div class="detail-row">
+          <span class="label">Recipient</span>
+          <span class="value" id="pay-recipient">-</span>
+        </div>
+
+        <div class="pay-section">
+          <h3>Choose Payment Method</h3>
+
+          <div id="paypal-button-container"></div>
+
+          <div class="or-divider">or</div>
+
+          <button class="pay-btn btn-stripe" id="btn-stripe" onclick="payWithStripe()">
+            Pay with Card / Bank Transfer (Stripe)
+          </button>
+        </div>
+
+        <div id="status-area"></div>
+      </div>
+
+      <div id="success-content" style="display:none;">
+        <div class="status-msg status-success" style="margin:0;">
+          Payment received successfully! Thank you.
+        </div>
+      </div>
+
+      <div class="secure-badge">
+        &#128274; Payments are processed securely via PayPal and Stripe
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var paymentData = null;
+    var apiBase = '';
+
+    var params = new URLSearchParams(window.location.search);
+    var submissionId = params.get('id');
+    var status = params.get('status');
+
+    if (status === 'success') {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('success-content').style.display = 'block';
+    } else if (submissionId) {
+      loadPaymentInfo();
+    } else {
+      document.getElementById('loading').innerHTML = 'No payment ID specified.';
+    }
+
+    async function loadPaymentInfo() {
+      try {
+        var res = await fetch(apiBase + '/api/payment-info/' + submissionId);
+        if (!res.ok) throw new Error('Payment not found');
+        paymentData = await res.json();
+
+        document.getElementById('pay-amount').textContent = '$' + parseFloat(paymentData.amount).toLocaleString('en-US', { minimumFractionDigits: 2 });
+        document.getElementById('pay-description').textContent = paymentData.description;
+        document.getElementById('pay-ref').textContent = paymentData.submissionId ? paymentData.submissionId.substring(0, 20) + '...' : '-';
+        document.getElementById('pay-recipient').textContent = paymentData.recipientName;
+
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('payment-content').style.display = 'block';
+
+        if (paymentData.paypalClientId) {
+          loadPayPalButtons();
+        } else {
+          document.getElementById('paypal-button-container').innerHTML = '<div style="text-align:center;color:#8b90a0;font-size:12px;padding:8px;">PayPal not available</div>';
+        }
+
+        if (!paymentData.hasStripe) {
+          document.getElementById('btn-stripe').style.display = 'none';
+        }
+      } catch (err) {
+        document.getElementById('loading').innerHTML = 'Error: ' + err.message;
+      }
+    }
+
+    function loadPayPalButtons() {
+      var env = paymentData.ppEnvironment === 'production' ? '' : 'sandbox.';
+      var script = document.createElement('script');
+      script.src = 'https://www.paypal.com/sdk/js?client-id=' + paymentData.paypalClientId + '&currency=USD';
+      script.onload = function() {
+        paypal.Buttons({
+          style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay', height: 45 },
+          createOrder: function(data, actions) {
+            return actions.order.create({
+              purchase_units: [{
+                amount: { value: parseFloat(paymentData.amount).toFixed(2) },
+                description: paymentData.description,
+                custom_id: paymentData.submissionId
+              }]
+            });
+          },
+          onApprove: function(data, actions) {
+            return actions.order.capture().then(function(details) {
+              // Notify backend
+              fetch(apiBase + '/api/paypal/capture-order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orderId: data.orderID, submissionId: paymentData.submissionId })
+              });
+              document.getElementById('payment-content').style.display = 'none';
+              document.getElementById('success-content').style.display = 'block';
+            });
+          },
+          onError: function(err) {
+            document.getElementById('status-area').innerHTML = '<div class="status-msg status-error">PayPal error: ' + err.message + '</div>';
+          }
+        }).render('#paypal-button-container');
+      };
+      document.head.appendChild(script);
+    }
+
+    async function payWithStripe() {
+      try {
+        document.getElementById('btn-stripe').textContent = 'Redirecting to Stripe...';
+        document.getElementById('btn-stripe').disabled = true;
+        var returnUrl = window.location.origin + '/pay.html?id=' + paymentData.submissionId;
+        var res = await fetch(apiBase + '/api/stripe/create-checkout-for-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            submissionId: paymentData.submissionId,
+            amount: paymentData.amount,
+            description: paymentData.description,
+            returnUrl: returnUrl
+          })
+        });
+        var result = await res.json();
+        if (!res.ok) throw new Error(result.error);
+        window.location.href = result.checkoutUrl;
+      } catch (err) {
+        document.getElementById('status-area').innerHTML = '<div class="status-msg status-error">Stripe error: ' + err.message + '</div>';
+        document.getElementById('btn-stripe').textContent = 'Pay with Card / Bank Transfer (Stripe)';
+        document.getElementById('btn-stripe').disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

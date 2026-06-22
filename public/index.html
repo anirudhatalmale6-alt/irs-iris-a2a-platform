@@ -1715,14 +1715,9 @@ MIIxxxxxx...
 
           var actions = '';
           if (s.payoutStatus !== 'distributed') {
-            if (window._ppConfigured) {
-              actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;background:#0070ba;color:#fff;border:none;" onclick="collectPayPal(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')" title="PayPal Checkout">Collect (PayPal)</button>';
-            }
-            actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="collectPayment(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')" title="Stripe (Card + ACH Bank Transfer)">Collect (Stripe)</button>';
+            actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;background:#22c55e;color:#fff;border:none;font-weight:600;" onclick="openPaymentPage(\'' + s.transactionId + '\')" title="Open payment gateway page">Collect Payment</button>';
+            actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="copyPaymentLink(\'' + s.transactionId + '\')" title="Copy shareable payment link">Copy Link</button>';
             actions += '<button class="btn btn-primary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="prefillDistribute(\'' + s.transactionId + '\', \'' + (s.amount || '0') + '\', \'' + (s.recipientName || '').replace(/'/g, '') + '\')">Distribute</button>';
-          }
-          if (s.checkoutUrl) {
-            actions += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;margin:2px;" onclick="window.open(\'' + s.checkoutUrl + '\', \'_blank\')">Payment Link</button>';
           }
 
           html += '<tr style="border-bottom:1px solid var(--border);">';
@@ -1752,36 +1747,19 @@ MIIxxxxxx...
       }
     }
 
-    async function collectPayment(submissionId, amount, recipientName) {
-      try {
-        var res = await fetch('/api/stripe/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ submissionId: submissionId, amount: amount, recipientName: recipientName, description: 'IRS 1099 - ' + recipientName })
-        });
-        var result = await res.json();
-        if (!res.ok) throw new Error(result.error);
-        document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">Stripe payment link created (Card + ACH Bank Transfer)! <a href="' + result.checkoutUrl + '" target="_blank" style="color:#22c55e;text-decoration:underline;font-weight:600;">Click here to open payment page</a> - share this link with the payer. ACH payments go through Federal Reserve rails.</div>';
-        loadSubmissions();
-      } catch (err) {
-        document.getElementById('sub-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
-      }
+    function openPaymentPage(submissionId) {
+      var payUrl = window.location.origin + '/pay.html?id=' + submissionId;
+      window.open(payUrl, '_blank');
+      document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">Payment gateway page opened! The payer can pay via PayPal (instant) or Stripe (card/ACH bank transfer). <br><br>Shareable link: <a href="' + payUrl + '" target="_blank" style="color:#22c55e;text-decoration:underline;">' + payUrl + '</a></div>';
     }
 
-    async function collectPayPal(submissionId, amount, recipientName) {
-      try {
-        var res = await fetch('/api/paypal/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ submissionId: submissionId, amount: amount, recipientName: recipientName, description: 'IRS 1099 Credit - ' + recipientName })
-        });
-        var result = await res.json();
-        if (!res.ok) throw new Error(result.error || JSON.stringify(result.detail));
-        document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">PayPal order created! <a href="' + result.approveUrl + '" target="_blank" style="color:#0070ba;text-decoration:underline;font-weight:600;">Click here to pay via PayPal</a> - share this link with the payer.</div>';
-        loadSubmissions();
-      } catch (err) {
-        document.getElementById('sub-result').innerHTML = '<div class="alert alert-error">PayPal Error: ' + err.message + '</div>';
-      }
+    function copyPaymentLink(submissionId) {
+      var payUrl = window.location.origin + '/pay.html?id=' + submissionId;
+      navigator.clipboard.writeText(payUrl).then(function() {
+        document.getElementById('sub-result').innerHTML = '<div class="alert alert-success">Payment link copied to clipboard! Share it with the payer.<br><br>' + payUrl + '</div>';
+      }).catch(function() {
+        document.getElementById('sub-result').innerHTML = '<div class="alert alert-info">Payment link: <a href="' + payUrl + '" target="_blank" style="color:#4f7df9;">' + payUrl + '</a></div>';
+      });
     }
 
     function prefillDistribute(submissionId, amount, recipientName) {

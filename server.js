@@ -1210,6 +1210,74 @@ api.post('/swift/settlements/:id/status', (req, res) => {
   res.json({ success: true, settlement: updated });
 });
 
+// Payment page data endpoint (public - no sensitive data exposed)
+api.get('/payment-info/:submissionId', (req, res) => {
+  const sub = db.getSubmission(req.params.submissionId);
+  if (!sub) return res.status(404).json({ error: 'Submission not found' });
+  res.json({
+    submissionId: sub.transactionId,
+    amount: sub.amount || '0',
+    recipientName: sub.recipientName || 'IRS Submission',
+    description: `IRS 1099 Credit - ${sub.recipientName || 'Payment'}`,
+    paypalClientId: appConfig.ppClientId || null,
+    ppEnvironment: appConfig.ppEnvironment || 'sandbox',
+    hasStripe: !!appConfig.stripeSecretKey
+  });
+});
+
+// Create Stripe PaymentIntent for embedded checkout
+api.post('/stripe/create-payment-intent', async (req, res) => {
+  try {
+    if (!appConfig.stripeSecretKey) {
+      return res.status(400).json({ error: 'Stripe not configured' });
+    }
+    const { amount, submissionId, description } = req.body;
+    if (!amount) return res.status(400).json({ error: 'Amount is required' });
+    const stripe = new StripePayouts(appConfig.stripeSecretKey);
+    const intent = await stripe.stripe.paymentIntents.create({
+      amount: Math.round(parseFloat(amount) * 100),
+      currency: 'usd',
+      payment_method_types: ['card', 'us_bank_account'],
+      description: description || 'IRS IRIS Payment',
+      metadata: { submissionId: submissionId || '' }
+    });
+    res.json({ clientSecret: intent.client_secret, intentId: intent.id });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Create Stripe Checkout for the payment page
+api.post('/stripe/create-checkout-for-payment', async (req, res) => {
+  try {
+    if (!appConfig.stripeSecretKey) return res.status(400).json({ error: 'Stripe not configured' });
+    const { submissionId, amount, description, returnUrl } = req.body;
+    if (!amount) return res.status(400).json({ error: 'Amount is required' });
+    const stripe = new StripePayouts(appConfig.stripeSecretKey);
+    const session = await stripe.stripe.checkout.sessions.create({
+      payment_method_types: ['card', 'us_bank_account'],
+      mode: 'payment',
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: { name: description || 'IRS IRIS Payment' },
+          unit_amount: Math.round(parseFloat(amount) * 100)
+        },
+        quantity: 1
+      }],
+      success_url: returnUrl ? `${returnUrl}?payment=success` : `${req.protocol}://${req.get('host')}/pay.html?id=${submissionId}&status=success`,
+      cancel_url: returnUrl ? `${returnUrl}?payment=cancelled` : `${req.protocol}://${req.get('host')}/pay.html?id=${submissionId}&status=cancelled`,
+      metadata: { submissionId: submissionId || '' }
+    });
+    if (submissionId) {
+      db.updateSubmission(submissionId, { collectStatus: 'link_created', checkoutSessionId: session.id });
+    }
+    res.json({ checkoutUrl: session.url, sessionId: session.id });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.use('/api', api);
 
 // ── Static + SPA Fallback ───────────────────────────────────────────────────
