@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IRS IRIS - A2A Integration Platform</title>
-  <script src="api-config.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -321,6 +320,7 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
+  <script src="api-config.js"></script>
 </head>
 <body>
   <div class="app">
@@ -815,7 +815,32 @@ MIIxxxxxx...
             <select id="pay-method">
               <option value="paypal">PayPal (Recommended - sends directly to email)</option>
               <option value="stripe">Stripe (Card / ACH Bank Transfer)</option>
+              <option value="wire">Wire Transfer (SWIFT)</option>
             </select>
+          </div>
+          <div id="wire-fields" style="display:none;margin-top:12px;">
+            <div class="grid-2">
+              <div class="form-group">
+                <label>Beneficiary BIC/SWIFT</label>
+                <input type="text" id="pay-wire-bic" placeholder="Recipient bank SWIFT code">
+              </div>
+              <div class="form-group">
+                <label>Beneficiary Bank</label>
+                <input type="text" id="pay-wire-bank" placeholder="Recipient bank name">
+              </div>
+              <div class="form-group">
+                <label>Beneficiary Account</label>
+                <input type="text" id="pay-wire-account" placeholder="Recipient account number">
+              </div>
+              <div class="form-group">
+                <label>Currency</label>
+                <select id="pay-wire-currency">
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                </select>
+              </div>
+            </div>
           </div>
           <button class="btn btn-primary" onclick="processDistribution()" style="width:100%;padding:14px;">&#128176; Send Payment</button>
           <div id="pay-result" style="margin-top: 12px;"></div>
@@ -925,6 +950,50 @@ MIIxxxxxx...
         </div>
 
         <div class="card">
+          <div class="card-title">&#127974; Wire Transfer / SWIFT Configuration</div>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Configure your bank details for SWIFT wire transfers. Used for settling IRS credits via international or domestic bank wire.</p>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>SWIFT/BIC Code</label>
+              <input type="text" id="cfg-swift-bic" placeholder="e.g. CHASUS33">
+            </div>
+            <div class="form-group">
+              <label>Bank Name</label>
+              <input type="text" id="cfg-swift-bank" placeholder="e.g. JPMorgan Chase">
+            </div>
+            <div class="form-group">
+              <label>Account Number</label>
+              <input type="text" id="cfg-swift-account" placeholder="Your bank account number">
+            </div>
+            <div class="form-group">
+              <label>Account Name</label>
+              <input type="text" id="cfg-swift-name" placeholder="Account holder name">
+            </div>
+            <div class="form-group">
+              <label>IBAN (optional)</label>
+              <input type="text" id="cfg-swift-iban" placeholder="For international transfers">
+            </div>
+            <div class="form-group">
+              <label>Message Type</label>
+              <select id="cfg-swift-msgtype">
+                <option value="MT103">MT103 (Single Customer Transfer)</option>
+                <option value="MT202">MT202 (General Financial Institution)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Correspondent BIC (optional)</label>
+              <input type="text" id="cfg-swift-corr-bic" placeholder="Intermediary bank BIC">
+            </div>
+            <div class="form-group">
+              <label>Correspondent Bank (optional)</label>
+              <input type="text" id="cfg-swift-corr-bank" placeholder="Intermediary bank name">
+            </div>
+          </div>
+          <button class="btn btn-secondary" onclick="saveSwiftConfig()">Save SWIFT Configuration</button>
+          <div id="swift-status" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="card">
           <div class="card-title">&#127970; Transmitter Details</div>
           <div class="grid-2">
             <div class="form-group">
@@ -975,6 +1044,8 @@ MIIxxxxxx...
               <dd><span class="badge badge-warning" id="dash-qb-status">Checking...</span></dd>
               <dt>PayPal</dt>
               <dd><span class="badge badge-warning" id="dash-pp-status">Checking...</span></dd>
+              <dt>Wire / SWIFT</dt>
+              <dd><span class="badge badge-warning" id="dash-swift-status">Checking...</span></dd>
             </dl>
           </div>
         </div>
@@ -1339,6 +1410,7 @@ MIIxxxxxx...
       const stripeEl = document.getElementById('dash-stripe-status');
       const qbEl = document.getElementById('dash-qb-status');
       const ppEl = document.getElementById('dash-pp-status');
+      const swiftEl = document.getElementById('dash-swift-status');
       const stepsEl = document.getElementById('dash-steps-list');
 
       if (cfg.clientId) {
@@ -1389,6 +1461,14 @@ MIIxxxxxx...
       } else {
         ppEl.textContent = 'Not configured';
         ppEl.className = 'badge badge-warning';
+      }
+
+      if (cfg.hasSwiftConfig) {
+        swiftEl.textContent = 'Configured';
+        swiftEl.className = 'badge badge-success';
+      } else {
+        swiftEl.textContent = 'Not configured';
+        swiftEl.className = 'badge badge-warning';
       }
 
       var steps = [];
@@ -1712,9 +1792,50 @@ MIIxxxxxx...
       document.getElementById('distribute-section').scrollIntoView({ behavior: 'smooth' });
     }
 
+    document.getElementById('pay-method').addEventListener('change', function() {
+      document.getElementById('wire-fields').style.display = this.value === 'wire' ? 'block' : 'none';
+    });
+
     async function processDistribution() {
       var subId = document.getElementById('pay-sub-id').value;
       var method = document.getElementById('pay-method').value;
+
+      if (method === 'wire') {
+        var wireData = {
+          submissionId: subId,
+          transactionId: subId || 'MANUAL-' + Date.now(),
+          amount: document.getElementById('pay-amount').value.trim(),
+          beneficiaryName: document.getElementById('pay-name').value.trim(),
+          beneficiaryAccount: document.getElementById('pay-wire-account').value.trim(),
+          beneficiaryBIC: document.getElementById('pay-wire-bic').value.trim(),
+          beneficiaryBank: document.getElementById('pay-wire-bank').value.trim(),
+          currency: document.getElementById('pay-wire-currency').value,
+          reference: document.getElementById('pay-desc').value.trim()
+        };
+        if (!wireData.amount || !wireData.beneficiaryName || !wireData.beneficiaryAccount || !wireData.beneficiaryBIC) {
+          alert('Amount, Beneficiary Name, Account, and BIC are required for wire transfers');
+          return;
+        }
+        try {
+          var res = await fetch('/api/swift/settle', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(wireData)
+          });
+          var result = await res.json();
+          if (!res.ok) throw new Error(result.error);
+          document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">Wire transfer initiated! Settlement Ref: ' + result.settlement.id + ' | UTI: ' + result.settlement.uti + '</div>';
+          document.getElementById('pay-amount').value = '';
+          document.getElementById('pay-name').value = '';
+          document.getElementById('pay-wire-account').value = '';
+          document.getElementById('pay-wire-bic').value = '';
+          document.getElementById('pay-wire-bank').value = '';
+          loadSubmissions();
+          loadPayouts();
+        } catch (err) {
+          document.getElementById('pay-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+        }
+        return;
+      }
+
       var data = {
         submissionId: subId,
         amount: document.getElementById('pay-amount').value.trim(),
@@ -1876,6 +1997,44 @@ MIIxxxxxx...
     }
 
     loadQBStatus();
+
+    async function saveSwiftConfig() {
+      var data = {
+        swiftBIC: document.getElementById('cfg-swift-bic').value.trim(),
+        bankName: document.getElementById('cfg-swift-bank').value.trim(),
+        accountNumber: document.getElementById('cfg-swift-account').value.trim(),
+        accountName: document.getElementById('cfg-swift-name').value.trim(),
+        iban: document.getElementById('cfg-swift-iban').value.trim(),
+        messageType: document.getElementById('cfg-swift-msgtype').value,
+        correspondentBIC: document.getElementById('cfg-swift-corr-bic').value.trim(),
+        correspondentBank: document.getElementById('cfg-swift-corr-bank').value.trim()
+      };
+      if (!data.swiftBIC || !data.bankName || !data.accountNumber) {
+        alert('SWIFT BIC, Bank Name, and Account Number are required');
+        return;
+      }
+      try {
+        var res = await fetch('/api/swift/config', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+        });
+        var result = await res.json();
+        if (!res.ok) throw new Error(result.error);
+        document.getElementById('swift-status').innerHTML = '<div class="alert alert-success">' + result.message + '</div>';
+      } catch (err) {
+        document.getElementById('swift-status').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+      }
+    }
+
+    async function loadSwiftStatus() {
+      try {
+        var res = await fetch('/api/swift/config');
+        var data = await res.json();
+        if (data.configured) {
+          document.getElementById('swift-status').innerHTML = '<div class="alert alert-success">SWIFT configured: ' + data.swiftBIC + ' / ' + data.bankName + ' / Acct: ' + data.accountNumber + '</div>';
+        }
+      } catch (e) {}
+    }
+    loadSwiftStatus();
 
     // ── Utility ─────────────────────────────────────────────
     function copyToClipboard(elementId) {
