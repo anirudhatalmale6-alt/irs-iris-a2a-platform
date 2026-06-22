@@ -343,6 +343,9 @@
       <div class="nav-item" data-page="submissions">
         <span class="nav-icon">&#128176;</span> Process &amp; Pay
       </div>
+      <div class="nav-item" data-page="settlement">
+        <span class="nav-icon">&#127974;</span> Settlement
+      </div>
       <div class="nav-item" data-page="settings">
         <span class="nav-icon">&#9881;</span> Settings
       </div>
@@ -857,6 +860,72 @@ MIIxxxxxx...
           <div id="stripe-balance" style="font-size:13px;color:var(--text-dim);">Click to check balances</div>
           <button class="btn btn-secondary" onclick="checkBalance()" style="margin-top:12px;">&#128179; Check Stripe Balance</button>
           <p style="color:var(--text-dim);font-size:12px;margin-top:8px;">PayPal balance: check at paypal.com. PayPal payouts send directly from your PayPal balance.</p>
+        </div>
+      </div>
+
+      <!-- ── Settlement Page ──────────────────────────────────── -->
+      <div id="page-settlement" class="page hidden">
+        <div class="page-header">
+          <h2>Settlement</h2>
+          <p>SWIFT wire transfer settlements for IRS credits. Configure your bank in Settings, then initiate settlements here.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">&#127974; SWIFT Bank Status</div>
+          <div id="settlement-swift-status" style="font-size:13px;color:var(--text-dim);">Checking...</div>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <div class="card-title">&#128176; Initiate Wire Settlement</div>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Send a SWIFT wire transfer to settle an IRS credit. Your bank details are used as the ordering account.</p>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Linked Submission</label>
+              <select id="settle-sub-id">
+                <option value="">-- Select a submission --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Amount (USD)</label>
+              <input type="text" id="settle-amount" placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>Beneficiary Name</label>
+              <input type="text" id="settle-ben-name" placeholder="Recipient full name">
+            </div>
+            <div class="form-group">
+              <label>Beneficiary Account</label>
+              <input type="text" id="settle-ben-account" placeholder="Account number or IBAN">
+            </div>
+            <div class="form-group">
+              <label>Beneficiary BIC/SWIFT</label>
+              <input type="text" id="settle-ben-bic" placeholder="e.g. CHASUS33">
+            </div>
+            <div class="form-group">
+              <label>Beneficiary Bank</label>
+              <input type="text" id="settle-ben-bank" placeholder="Bank name">
+            </div>
+            <div class="form-group">
+              <label>Currency</label>
+              <select id="settle-currency">
+                <option value="USD">USD - US Dollar</option>
+                <option value="EUR">EUR - Euro</option>
+                <option value="GBP">GBP - British Pound</option>
+                <option value="KES">KES - Kenyan Shilling</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Reference / Remittance Info</label>
+              <input type="text" id="settle-reference" placeholder="Payment reference">
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="initiateSettlement()" style="width:100%;padding:14px;">&#127974; Initiate SWIFT Wire Settlement</button>
+          <div id="settle-result" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <div class="card-title">&#128203; Settlement History</div>
+          <div id="settlements-list" style="font-size:13px;color:var(--text-dim);">Loading...</div>
         </div>
       </div>
 
@@ -1487,6 +1556,7 @@ MIIxxxxxx...
       document.getElementById('page-' + pageName).classList.remove('hidden');
       document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
       document.querySelector('.nav-item[data-page="' + pageName + '"]').classList.add('active');
+      if (pageName === 'settlement') loadSettlementPage();
     }
 
     async function quickGetAccessToken() {
@@ -2012,6 +2082,120 @@ MIIxxxxxx...
       } catch (e) {}
     }
     loadSwiftStatus();
+
+    // ── Settlement Page Functions ─────────────────────────────
+    async function loadSettlementPage() {
+      // Load SWIFT status
+      try {
+        var res = await fetch('/api/swift/config');
+        var data = await res.json();
+        var el = document.getElementById('settlement-swift-status');
+        if (data.configured) {
+          el.innerHTML = '<div class="alert alert-success">SWIFT configured: ' + data.swiftBIC + ' / ' + data.bankName + ' / Account: ' + data.accountNumber + ' / Message Type: ' + data.messageType + '</div>';
+        } else {
+          el.innerHTML = '<div class="alert alert-warning">SWIFT not configured. Go to <a href="#" onclick="showPage(\'settings\')" style="color:inherit;text-decoration:underline;">Settings</a> to add your bank details.</div>';
+        }
+      } catch (e) {}
+
+      // Load submissions into dropdown
+      try {
+        var res = await fetch('/api/submissions');
+        var data = await res.json();
+        var select = document.getElementById('settle-sub-id');
+        select.innerHTML = '<option value="">-- Select a submission --</option>';
+        var subs = data.submissions || [];
+        for (var i = 0; i < subs.length; i++) {
+          var s = subs[i];
+          select.innerHTML += '<option value="' + s.transactionId + '" data-amount="' + (s.amount || '0') + '">' + s.formType + ' - $' + s.amount + ' - ' + (s.recipientName || s.transactionId.substring(0, 12)) + '</option>';
+        }
+      } catch (e) {}
+
+      // Load settlement history
+      loadSettlements();
+    }
+
+    document.getElementById('settle-sub-id').addEventListener('change', function() {
+      var opt = this.options[this.selectedIndex];
+      if (opt && opt.dataset.amount) {
+        document.getElementById('settle-amount').value = opt.dataset.amount;
+      }
+    });
+
+    async function initiateSettlement() {
+      var subId = document.getElementById('settle-sub-id').value;
+      var data = {
+        submissionId: subId,
+        transactionId: subId || 'MANUAL-' + Date.now(),
+        amount: document.getElementById('settle-amount').value.trim(),
+        beneficiaryName: document.getElementById('settle-ben-name').value.trim(),
+        beneficiaryAccount: document.getElementById('settle-ben-account').value.trim(),
+        beneficiaryBIC: document.getElementById('settle-ben-bic').value.trim(),
+        beneficiaryBank: document.getElementById('settle-ben-bank').value.trim(),
+        currency: document.getElementById('settle-currency').value,
+        reference: document.getElementById('settle-reference').value.trim()
+      };
+
+      if (!data.amount || !data.beneficiaryName || !data.beneficiaryAccount || !data.beneficiaryBIC) {
+        alert('Amount, Beneficiary Name, Account, and BIC/SWIFT code are required');
+        return;
+      }
+
+      try {
+        var res = await fetch('/api/swift/settle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        var result = await res.json();
+        if (!res.ok) throw new Error(result.error);
+        document.getElementById('settle-result').innerHTML = '<div class="alert alert-success">Wire settlement initiated!<br>Settlement Ref: <strong>' + result.settlement.id + '</strong><br>UTI: <strong>' + result.settlement.uti + '</strong><br>Message Type: ' + result.settlement.messageType + '<br>Amount: $' + result.settlement.amount + ' ' + result.settlement.currency + '</div>';
+        document.getElementById('settle-amount').value = '';
+        document.getElementById('settle-ben-name').value = '';
+        document.getElementById('settle-ben-account').value = '';
+        document.getElementById('settle-ben-bic').value = '';
+        document.getElementById('settle-ben-bank').value = '';
+        document.getElementById('settle-reference').value = '';
+        loadSettlements();
+      } catch (err) {
+        document.getElementById('settle-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+      }
+    }
+
+    async function loadSettlements() {
+      try {
+        var res = await fetch('/api/swift/settlements');
+        var data = await res.json();
+        var el = document.getElementById('settlements-list');
+        var settlements = data.settlements || [];
+
+        if (settlements.length === 0) {
+          el.innerHTML = '<p>No settlements yet. Initiate a wire settlement above.</p>';
+          return;
+        }
+
+        var html = '<table style="width:100%;border-collapse:collapse;">';
+        html += '<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:8px;">Ref</th><th style="text-align:left;padding:8px;">Type</th><th style="text-align:left;padding:8px;">Beneficiary</th><th style="text-align:left;padding:8px;">Amount</th><th style="text-align:left;padding:8px;">UTI</th><th style="text-align:left;padding:8px;">Status</th><th style="text-align:left;padding:8px;">Date</th></tr>';
+
+        var sorted = settlements.slice().reverse();
+        for (var i = 0; i < sorted.length; i++) {
+          var s = sorted[i];
+          var statusClass = s.status === 'completed' ? 'badge-success' : s.status === 'failed' ? 'badge-error' : 'badge-warning';
+          html += '<tr style="border-bottom:1px solid var(--border);">';
+          html += '<td style="padding:8px;font-family:monospace;font-size:12px;">' + (s.id || '').substring(0, 16) + '</td>';
+          html += '<td style="padding:8px;">' + (s.messageType || 'MT103') + '</td>';
+          html += '<td style="padding:8px;">' + (s.beneficiaryName || '') + '</td>';
+          html += '<td style="padding:8px;color:#22c55e;font-weight:600;">$' + (s.amount || '0') + '</td>';
+          html += '<td style="padding:8px;font-family:monospace;font-size:11px;">' + (s.uti || '').substring(0, 20) + '...</td>';
+          html += '<td style="padding:8px;"><span class="badge ' + statusClass + '">' + (s.status || 'initiated') + '</span></td>';
+          html += '<td style="padding:8px;font-size:12px;">' + (s.timestamp ? new Date(s.timestamp).toLocaleDateString() : '') + '</td>';
+          html += '</tr>';
+        }
+        html += '</table>';
+        el.innerHTML = html;
+      } catch (e) {
+        document.getElementById('settlements-list').innerHTML = '<p>Failed to load settlements.</p>';
+      }
+    }
 
     // ── Utility ─────────────────────────────────────────────
     function copyToClipboard(elementId) {
