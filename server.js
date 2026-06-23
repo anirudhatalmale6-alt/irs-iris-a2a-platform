@@ -662,6 +662,33 @@ api.get('/payouts', (req, res) => {
   res.json({ payouts: db.getPayouts() });
 });
 
+api.post('/record-distribution', (req, res) => {
+  try {
+    const { submissionId, amount, recipientName, recipientEmail, description, method } = req.body;
+    if (!amount) return res.status(400).json({ error: 'amount is required' });
+
+    const id = 'DIST-' + crypto.randomBytes(6).toString('hex');
+    const payout = db.addPayout({
+      id,
+      submissionId: submissionId || '',
+      recipientEmail: recipientEmail || '',
+      recipientName: recipientName || '',
+      amount: parseFloat(amount),
+      status: 'completed',
+      type: method || 'manual_bank_transfer',
+      description: description || ''
+    });
+
+    if (submissionId) {
+      db.updateSubmission(submissionId, { payoutStatus: 'distributed', payoutId: id });
+    }
+
+    res.json({ success: true, payout });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 api.post('/stripe/checkout', async (req, res) => {
   try {
     if (!appConfig.stripeSecretKey) {
@@ -712,37 +739,46 @@ api.post('/stripe/send-payout', async (req, res) => {
     }
 
     const { submissionId, amount, recipientEmail, recipientName, description } = req.body;
-    if (!amount || !recipientEmail) {
-      return res.status(400).json({ error: 'amount and recipientEmail are required' });
+    if (!amount) {
+      return res.status(400).json({ error: 'amount is required' });
     }
 
     const stripe = new StripePayouts(appConfig.stripeSecretKey);
-    const paymentIntent = await stripe.createPaymentIntent({
+    const bal = await stripe.getBalance();
+    const available = (bal.available || []).reduce((sum, b) => sum + (b.currency === 'usd' ? b.amount : 0), 0) / 100;
+
+    if (available < parseFloat(amount)) {
+      return res.status(400).json({
+        error: `Insufficient Stripe balance. Available: $${available.toFixed(2)}, Requested: $${parseFloat(amount).toFixed(2)}. Funds may still be pending (takes 2 business days after collection). Use PayPal or Wire Transfer to distribute from other sources.`
+      });
+    }
+
+    const payout = await stripe.createPayout({
       amount: parseFloat(amount),
-      description: description || `Distribution to ${recipientName || recipientEmail}`,
-      metadata: {
-        submissionId: submissionId || '',
-        recipientName: recipientName || '',
-        recipientEmail
-      }
+      description: description || `Distribution - ${recipientName || recipientEmail || submissionId || 'manual'}`
     });
 
-    const payout = db.addPayout({
-      id: paymentIntent.id,
+    const record = db.addPayout({
+      id: payout.id,
       submissionId: submissionId || '',
-      recipientEmail,
+      recipientEmail: recipientEmail || '',
       recipientName: recipientName || '',
       amount: parseFloat(amount),
-      status: paymentIntent.status,
-      stripeId: paymentIntent.id
+      status: payout.status,
+      stripeId: payout.id,
+      type: 'stripe_payout'
     });
 
     if (submissionId) {
-      db.updateSubmission(submissionId, { payoutStatus: 'distributed', payoutId: paymentIntent.id });
+      db.updateSubmission(submissionId, { payoutStatus: 'distributed', payoutId: payout.id });
     }
 
-    res.json({ success: true, payout, stripePaymentIntent: paymentIntent });
+    res.json({ success: true, payout: record, stripePaymentIntent: { id: payout.id, status: payout.status } });
   } catch (err) {
+    const msg = err.message || '';
+    if (msg.includes('balance') || msg.includes('insufficient')) {
+      return res.status(400).json({ error: 'Insufficient Stripe balance. Collected funds may still be pending. Use PayPal Payout or Wire Transfer instead.' });
+    }
     res.status(400).json({ error: err.message });
   }
 });

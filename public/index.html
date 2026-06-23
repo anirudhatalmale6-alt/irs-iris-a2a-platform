@@ -787,7 +787,7 @@ MIIxxxxxx...
         <!-- Quick Distribute Form -->
         <div class="card" style="margin-top: 24px;" id="distribute-section">
           <div class="card-title">&#9314; Distribute Funds</div>
-          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Send payment to a third party from a recorded credit. PayPal sends directly to their email - they get the money right away.</p>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Send collected funds to recipients. PayPal sends directly to their email. Wire sends to their bank. Stripe cashes out to your linked bank account.</p>
           <div class="grid-2">
             <div class="form-group">
               <label>Linked Submission</label>
@@ -815,9 +815,10 @@ MIIxxxxxx...
           <div class="form-group">
             <label>Payment Method</label>
             <select id="pay-method">
-              <option value="paypal">PayPal (Recommended - sends directly to email)</option>
-              <option value="stripe">Stripe (Card / ACH Bank Transfer)</option>
-              <option value="wire">Wire Transfer (SWIFT)</option>
+              <option value="paypal">PayPal Payout (sends directly to recipient email)</option>
+              <option value="wire">Wire Transfer / SWIFT (sends to recipient bank)</option>
+              <option value="stripe">Stripe Cashout (sends to YOUR bank account)</option>
+              <option value="manual">Record Manual Transfer (already sent via bank)</option>
             </select>
           </div>
           <div id="wire-fields" style="display:none;margin-top:12px;">
@@ -1846,21 +1847,46 @@ MIIxxxxxx...
     async function processDistribution() {
       var subId = document.getElementById('pay-sub-id').value;
       var method = document.getElementById('pay-method').value;
+      var amount = document.getElementById('pay-amount').value.trim();
+      var recipientName = document.getElementById('pay-name').value.trim();
+      var desc = document.getElementById('pay-desc').value.trim();
+
+      if (!amount) { alert('Amount is required'); return; }
+
+      if (method === 'manual') {
+        try {
+          var res = await fetch('/api/record-distribution', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ submissionId: subId, amount: amount, recipientName: recipientName, recipientEmail: document.getElementById('pay-email').value.trim(), description: desc, method: 'manual_bank_transfer' })
+          });
+          var result = await res.json();
+          if (!res.ok) throw new Error(result.error);
+          document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">Distribution recorded! ID: ' + result.payout.id + ' - Transaction marked as distributed.</div>';
+          document.getElementById('pay-amount').value = '';
+          document.getElementById('pay-email').value = '';
+          document.getElementById('pay-name').value = '';
+          document.getElementById('pay-desc').value = '';
+          loadSubmissions(); loadPayouts();
+        } catch (err) {
+          document.getElementById('pay-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+        }
+        return;
+      }
 
       if (method === 'wire') {
         var wireData = {
           submissionId: subId,
           transactionId: subId || 'MANUAL-' + Date.now(),
-          amount: document.getElementById('pay-amount').value.trim(),
-          beneficiaryName: document.getElementById('pay-name').value.trim(),
+          amount: amount,
+          beneficiaryName: recipientName,
           beneficiaryAccount: document.getElementById('pay-wire-account').value.trim(),
           beneficiaryBIC: document.getElementById('pay-wire-bic').value.trim(),
           beneficiaryBank: document.getElementById('pay-wire-bank').value.trim(),
           currency: document.getElementById('pay-wire-currency').value,
-          reference: document.getElementById('pay-desc').value.trim()
+          reference: desc
         };
-        if (!wireData.amount || !wireData.beneficiaryName || !wireData.beneficiaryAccount || !wireData.beneficiaryBIC) {
-          alert('Amount, Beneficiary Name, Account, and BIC are required for wire transfers');
+        if (!wireData.beneficiaryName || !wireData.beneficiaryAccount || !wireData.beneficiaryBIC) {
+          alert('Beneficiary Name, Account, and BIC are required for wire transfers');
           return;
         }
         try {
@@ -1875,51 +1901,55 @@ MIIxxxxxx...
           document.getElementById('pay-wire-account').value = '';
           document.getElementById('pay-wire-bic').value = '';
           document.getElementById('pay-wire-bank').value = '';
-          loadSubmissions();
-          loadPayouts();
+          loadSubmissions(); loadPayouts();
         } catch (err) {
           document.getElementById('pay-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
         }
         return;
       }
 
-      var data = {
-        submissionId: subId,
-        amount: document.getElementById('pay-amount').value.trim(),
-        recipientEmail: document.getElementById('pay-email').value.trim(),
-        recipientName: document.getElementById('pay-name').value.trim(),
-        description: document.getElementById('pay-desc').value.trim()
-      };
-
-      if (!data.amount || !data.recipientEmail) {
-        alert('Amount and Recipient Email are required');
+      if (method === 'paypal') {
+        var email = document.getElementById('pay-email').value.trim();
+        if (!email) { alert('Recipient Email is required for PayPal payouts'); return; }
+        try {
+          var res = await fetch('/api/paypal/send-payout', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ submissionId: subId, amount: amount, recipientEmail: email, recipientName: recipientName, description: desc })
+          });
+          var result = await res.json();
+          if (!res.ok) throw new Error(result.error || JSON.stringify(result.detail));
+          var payId = result.paypalBatch ? result.paypalBatch.payout_batch_id : 'N/A';
+          document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">PayPal payout sent to ' + email + '! Batch ID: ' + payId + '</div>';
+          document.getElementById('pay-amount').value = '';
+          document.getElementById('pay-email').value = '';
+          document.getElementById('pay-name').value = '';
+          document.getElementById('pay-desc').value = '';
+          loadSubmissions(); loadPayouts();
+        } catch (err) {
+          document.getElementById('pay-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+        }
         return;
       }
 
-      try {
-        var endpoint = method === 'paypal' ? '/api/paypal/send-payout' : '/api/stripe/send-payout';
-        var res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        var result = await res.json();
-        if (!res.ok) throw new Error(result.error || JSON.stringify(result.detail));
-
-        var payId = method === 'paypal'
-          ? (result.paypalBatch ? result.paypalBatch.payout_batch_id : 'N/A')
-          : (result.stripePaymentIntent ? result.stripePaymentIntent.id : 'N/A');
-        var via = method === 'paypal' ? 'PayPal' : 'Stripe';
-
-        document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">Payment sent via ' + via + '! ID: ' + payId + '</div>';
-        document.getElementById('pay-amount').value = '';
-        document.getElementById('pay-email').value = '';
-        document.getElementById('pay-name').value = '';
-        document.getElementById('pay-desc').value = '';
-        loadSubmissions();
-        loadPayouts();
-      } catch (err) {
-        document.getElementById('pay-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+      if (method === 'stripe') {
+        try {
+          var res = await fetch('/api/stripe/send-payout', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ submissionId: subId, amount: amount, recipientName: recipientName, recipientEmail: document.getElementById('pay-email').value.trim(), description: desc })
+          });
+          var result = await res.json();
+          if (!res.ok) throw new Error(result.error);
+          var payId = result.stripePaymentIntent ? result.stripePaymentIntent.id : 'N/A';
+          document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">Stripe payout to your bank initiated! ID: ' + payId + '</div>';
+          document.getElementById('pay-amount').value = '';
+          document.getElementById('pay-email').value = '';
+          document.getElementById('pay-name').value = '';
+          document.getElementById('pay-desc').value = '';
+          loadSubmissions(); loadPayouts();
+        } catch (err) {
+          document.getElementById('pay-result').innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+        }
+        return;
       }
     }
 
