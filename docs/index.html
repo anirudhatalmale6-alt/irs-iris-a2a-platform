@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IRS IRIS - A2A Integration Platform</title>
-  <script src="api-config.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -817,7 +816,7 @@ MIIxxxxxx...
             <label>Payment Method</label>
             <select id="pay-method">
               <option value="paypal">PayPal Payout (sends directly to recipient email)</option>
-              <option value="wire">Wire Transfer / SWIFT (sends to recipient bank)</option>
+              <option value="wire">Wire / SWIFT (generates MT103 message only — you submit it at your bank)</option>
               <option value="stripe">Stripe Cashout (sends to YOUR bank account)</option>
               <option value="manual">Record Manual Transfer (already sent via bank)</option>
             </select>
@@ -869,7 +868,7 @@ MIIxxxxxx...
       <div id="page-settlement" class="page hidden">
         <div class="page-header">
           <h2>Settlement</h2>
-          <p>SWIFT wire transfer settlements for IRS credits. Configure your bank in Settings, then initiate settlements here.</p>
+          <p>Generates SWIFT MT103 messages for IRS credit settlements, with a UTI linking each one back to its IRS transaction. This app is not connected to the SWIFT network — it produces the message; your bank transmits it.</p>
         </div>
 
         <div class="card">
@@ -1896,7 +1895,7 @@ MIIxxxxxx...
           });
           var result = await res.json();
           if (!res.ok) throw new Error(result.error);
-          document.getElementById('pay-result').innerHTML = '<div class="alert alert-success">Wire transfer initiated! Settlement Ref: ' + result.settlement.id + ' | UTI: ' + result.settlement.uti + '</div>';
+          document.getElementById('pay-result').innerHTML = '<div class="alert alert-warning"><strong>MT103 message generated — no money has moved yet.</strong><br>Settlement Ref: ' + result.settlement.id + '<br>UTI: ' + result.settlement.uti + '<br>You must submit this message through your bank\'s SWIFT portal to actually send the funds.</div>';
           document.getElementById('pay-amount').value = '';
           document.getElementById('pay-name').value = '';
           document.getElementById('pay-wire-account').value = '';
@@ -2179,7 +2178,7 @@ MIIxxxxxx...
         });
         var result = await res.json();
         if (!res.ok) throw new Error(result.error);
-        document.getElementById('settle-result').innerHTML = '<div class="alert alert-success">Wire settlement initiated!<br>Settlement Ref: <strong>' + result.settlement.id + '</strong><br>UTI: <strong>' + result.settlement.uti + '</strong><br>Message Type: ' + result.settlement.messageType + '<br>Amount: $' + result.settlement.amount + ' ' + result.settlement.currency + '</div>';
+        document.getElementById('settle-result').innerHTML = '<div class="alert alert-warning"><strong>MT103 message generated — no money has moved yet.</strong><br>Settlement Ref: <strong>' + result.settlement.id + '</strong><br>UTI: <strong>' + result.settlement.uti + '</strong><br>Message Type: ' + result.settlement.messageType + '<br>Amount: $' + result.settlement.amount + ' ' + result.settlement.currency + '<br><br>This app cannot transmit to the SWIFT network. Take this message to your bank (or their portal) to execute the wire.</div>';
         document.getElementById('settle-amount').value = '';
         document.getElementById('settle-ben-name').value = '';
         document.getElementById('settle-ben-account').value = '';
